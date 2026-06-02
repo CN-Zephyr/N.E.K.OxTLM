@@ -13,7 +13,7 @@ keywords = [
     "maid", "farm", "idle", "feed", "shear", "torch", "creeper", "zombie", "skeleton"
 ]
 version = "1.0.0"
-entry = "neko_minecraft_loader:NekoMinecraftPlugin"
+entry = "plugins.neko_minecraft:NekoMinecraftPlugin"
 
 [plugin.author]
 name = "N.E.K.O Community"
