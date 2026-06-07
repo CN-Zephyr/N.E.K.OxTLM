@@ -814,10 +814,10 @@ public class MessageHandler {
             response.addProperty("type", Protocol.TYPE_ATTACK_TARGET_RESULT);
             if (requestId != null) response.addProperty("request_id", requestId);
             JsonObject resultData = new JsonObject();
-            resultData.addProperty("success", true);
+            resultData.addProperty("status", "dispatched");
             resultData.addProperty("maid_id", maidId);
+            resultData.addProperty("message", "已通知" + maid.getName().getString() + "切换攻击模式，正在搜索目标");
             resultData.addProperty("target_count", allEntries.size());
-            resultData.addProperty("target_name", firstTarget.getName().getString());
             JsonArray targetNames = new JsonArray();
             for (NekoAttackTargetStore.TargetEntry e : allEntries) {
                 targetNames.add(e.targetName);

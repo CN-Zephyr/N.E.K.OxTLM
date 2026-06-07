@@ -1229,6 +1229,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "此工具会自动让女仆站起、切换到攻击工作模式，无需额外操作。"
             "注意：此工具是让女仆攻击特定怪物，不是切换工作模式。"
             "如果玩家要求女仆做某种工作（如打草、收甘蔗、种田等），应该使用mc_switch_task而不是此工具。"
+            "【重要】这是异步指令，返回status=dispatched仅表示指令已下达，不代表击杀已完成。"
+            "不要假设怪物已被击杀，不要主动向用户汇报击杀结果。"
+            "如需确认攻击进度，使用mc_get_game_context查询附近实体。"
         ),
         parameters={
             "type": "object",
@@ -1261,8 +1264,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 return Err(str(result.get("data", {})))
             result_data = result.get("data", {})
             return Ok({
-                "success": result_data.get("success", True),
-                "target_name": result_data.get("target_name", ""),
+                "status": result_data.get("status", "dispatched"),
+                "message": result_data.get("message", ""),
                 "target_entity_id": target_entity_id,
                 "target_count": result_data.get("target_count", 1),
             })
@@ -1309,7 +1312,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
 
         result_data = result.get("data", {})
         return Ok({
-            "success": result_data.get("success", True),
+            "status": result_data.get("status", "dispatched"),
+            "message": result_data.get("message", ""),
             "target_name": target_name,
             "target_count": result_data.get("target_count", len(matched_entities)),
             "targets": [{"name": e["name"], "id": e["id"]} for e in matched_entities],

@@ -117,7 +117,7 @@
 | `chat_result`              | 聊天发送结果           |
 | `game_context`             | 游戏上下文数据          |
 | `skill_result`             | 技能查询/使用结果        |
-| `attack_target_result`     | 攻击目标设置结果         |
+| `attack_target_result`     | 攻击指令下达结果（半成品：仅下达指令，不跟踪击杀进度） |
 | `command_execution_result` | Minecraft 指令执行结果 |
 | `config`                   | 当前配置             |
 | `event`                    | 游戏事件推送           |
