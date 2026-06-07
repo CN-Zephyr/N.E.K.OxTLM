@@ -69,7 +69,7 @@
 | `send_chat`        | 让女仆发送聊天消息         | `maid_id`, `message`                                |
 | `get_game_context` | 获取游戏上下文           | `category`, `maid_id`(可选)                           |
 | `use_skill`        | 使用/查询技能           | `skill_name`, `maid_id`(可选)                         |
-| `attack_target`    | 指定女仆攻击目标          | `maid_id`, `target_entity_id` 或 `target_entity_ids` |
+| `attack_target`    | 指定女仆攻击目标（实验性，未暴露给LLM） | `maid_id`, `target_entity_id` 或 `target_entity_ids` |
 | `execute_command`  | 请求执行 Minecraft 指令 | `command`                                           |
 | `get_config`       | 获取当前配置            | 无                                                   |
 
@@ -117,7 +117,7 @@
 | `chat_result`              | 聊天发送结果           |
 | `game_context`             | 游戏上下文数据          |
 | `skill_result`             | 技能查询/使用结果        |
-| `attack_target_result`     | 攻击指令下达结果（半成品：仅下达指令，不跟踪击杀进度） |
+| `attack_target_result`     | 攻击目标设置结果（实验性，未暴露给LLM） |
 | `command_execution_result` | Minecraft 指令执行结果 |
 | `config`                   | 当前配置             |
 | `event`                    | 游戏事件推送           |

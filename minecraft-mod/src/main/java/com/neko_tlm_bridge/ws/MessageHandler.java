@@ -788,11 +788,8 @@ public class MessageHandler {
                         ResourceLocation taskRL = ResourceLocation.parse(taskId);
                         var taskOpt = TaskManager.findTask(taskRL);
                         if (taskOpt.isPresent()) {
-                            IMaidTask t = taskOpt.get();
-                            if (t.isEnable(maid)) {
-                                foundTask = t;
-                                break;
-                            }
+                            foundTask = taskOpt.get();
+                            break;
                         }
                     }
                     if (foundTask != null) {

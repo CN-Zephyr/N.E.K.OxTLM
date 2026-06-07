@@ -58,7 +58,6 @@ Skill 是提示词包，触发时会注入行为规范或启动知识检索（RA
 - mc_switch_task：切换工作模式（task=玩家原话，系统自动匹配）
 - mc_switch_schedule：切换日程安排（schedule=day/night/all）
 - mc_equip_item：装备物品到主手
-- mc_attack_target：攻击指定目标
 - mc_use_skill：触发技能
 - mc_execute_command：执行服务器指令（需玩家确认）
 
@@ -837,7 +836,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         description=(
             "切换女仆的工作模式/任务/职业，让女仆执行某种工作。"
             "task参数传玩家描述的工作内容即可（如'打草'、'收甘蔗'、'种田'、'攻击'、'待机'），系统会自动匹配到正确的模式ID。"
-            "注意：'打草'、'收甘蔗'等是工作模式，不是攻击目标，应使用此工具而非mc_attack_target。"
+            "如果玩家要求女仆打怪、杀怪，切换到攻击模式即可（如'攻击'、'打怪'），女仆会自行搜索并攻击附近的敌对生物。"
         ),
         parameters={
             "type": "object",
@@ -1219,102 +1218,4 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "approved_by": result_data.get("approved_by", ""),
         })
 
-    @llm_tool(
-        name="mc_attack_target",
-        description=(
-            "让女仆攻击附近的敌对生物或怪物。"
-            "当玩家要求女仆杀怪、打怪、干掉某个怪物时，使用此工具。"
-            "例如：'干掉苦力怕'、'杀僵尸'、'打骷髅'、'kill creepers'等。"
-            "提供target_name时会自动搜索附近所有同名实体并一起攻击。"
-            "此工具会自动让女仆站起、切换到攻击工作模式，无需额外操作。"
-            "注意：此工具是让女仆攻击特定怪物，不是切换工作模式。"
-            "如果玩家要求女仆做某种工作（如打草、收甘蔗、种田等），应该使用mc_switch_task而不是此工具。"
-            "【重要】这是异步指令，返回status=dispatched仅表示指令已下达，不代表击杀已完成。"
-            "不要假设怪物已被击杀，不要主动向用户汇报击杀结果。"
-            "如需确认攻击进度，使用mc_get_game_context查询附近实体。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "target_name": {
-                    "type": "string",
-                    "description": "要攻击的敌对生物名称，如'苦力怕'、'creeper'、'僵尸'、'skeleton'，会自动搜索附近所有同名实体一起攻击",
-                },
-                "target_entity_id": {
-                    "type": "string",
-                    "description": "目标实体的精确UUID（如果已知），仅攻击此单个实体",
-                },
-            },
-        },
-    )
-    async def attack_target(self, *, target_name="", target_entity_id="", **_):
-        self.logger.info(f"[Entry] attack_target called with target_name='{target_name}', target_entity_id='{target_entity_id}'")
-        if not self.connected:
-            return Err("Not connected to Minecraft")
-        maid_id = self._resolve_maid_id()
-        if not maid_id:
-            return Err("No maid assigned")
 
-        if target_entity_id:
-            result = await self._send_request({
-                "type": "attack_target",
-                "data": {"maid_id": maid_id, "target_entity_id": target_entity_id},
-            }, timeout=10)
-            if result.get("type") == "error":
-                return Err(str(result.get("data", {})))
-            result_data = result.get("data", {})
-            return Ok({
-                "status": result_data.get("status", "dispatched"),
-                "message": result_data.get("message", ""),
-                "target_entity_id": target_entity_id,
-                "target_count": result_data.get("target_count", 1),
-            })
-
-        if not target_name:
-            return Err("请提供target_name或target_entity_id")
-
-        ctx_result = await self._send_request({
-            "type": "get_game_context",
-            "data": {"maid_id": maid_id, "category": "nearby_entities"},
-        })
-        if ctx_result.get("type") == "error":
-            return Err(f"查询附近实体失败: {ctx_result.get('data', {})}")
-
-        entities = ctx_result.get("data", {}).get("nearby_entities", [])
-        target_lower = target_name.lower()
-        matched_entities = []
-        for entity in entities:
-            entity_name = entity.get("name", "").lower()
-            entity_type = entity.get("type", "").lower()
-            if target_lower in entity_name or target_lower in entity_type:
-                eid = entity.get("entity_id", entity.get("id", ""))
-                if eid:
-                    matched_entities.append({"id": eid, "name": entity.get("name", "")})
-
-        if not matched_entities:
-            return Err(f"未在附近找到名为'{target_name}'的实体")
-
-        if len(matched_entities) == 1:
-            entity_id = matched_entities[0]["id"]
-            result = await self._send_request({
-                "type": "attack_target",
-                "data": {"maid_id": maid_id, "target_entity_id": entity_id},
-            }, timeout=10)
-        else:
-            entity_ids = [e["id"] for e in matched_entities]
-            result = await self._send_request({
-                "type": "attack_target",
-                "data": {"maid_id": maid_id, "target_entity_ids": entity_ids},
-            }, timeout=10)
-
-        if result.get("type") == "error":
-            return Err(str(result.get("data", {})))
-
-        result_data = result.get("data", {})
-        return Ok({
-            "status": result_data.get("status", "dispatched"),
-            "message": result_data.get("message", ""),
-            "target_name": target_name,
-            "target_count": result_data.get("target_count", len(matched_entities)),
-            "targets": [{"name": e["name"], "id": e["id"]} for e in matched_entities],
-        })
