@@ -9,6 +9,7 @@ public final class Protocol {
     public static final String TYPE_EXECUTE_COMMAND = "execute_command";
     public static final String TYPE_ATTACK_TARGET = "attack_target";
     public static final String TYPE_GET_CONFIG = "get_config";
+    public static final String TYPE_SET_MONITORED_MAID = "set_monitored_maid";
     public static final String TYPE_PING = "ping";
 
     public static final String TYPE_MAID_STATUS = "maid_status";
@@ -24,6 +25,13 @@ public final class Protocol {
     public static final String TYPE_ATTACK_TARGET_RESULT = "attack_target_result";
     public static final String TYPE_CONFIG = "config";
     public static final String TYPE_CONFIG_UPDATE = "config_update";
+
+    // New event types for companion awareness
+    public static final String EVENT_MAID_DEATH = "maid_death";
+    public static final String EVENT_PLAYER_DEATH = "player_death";
+    public static final String EVENT_WEATHER_CHANGE = "weather_change";
+    public static final String EVENT_TIME_PHASE_CHANGE = "time_phase_change";
+    public static final String EVENT_INVENTORY_CHANGE = "inventory_change";
 
     private Protocol() {}
 }

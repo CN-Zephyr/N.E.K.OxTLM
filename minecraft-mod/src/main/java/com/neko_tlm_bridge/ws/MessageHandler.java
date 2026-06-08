@@ -847,6 +847,21 @@ public class MessageHandler {
         conn.send(GSON.toJson(response));
     }
 
+    public void handleSetMonitoredMaid(WebSocket conn, String requestId, JsonObject json) {
+        JsonObject data = json.has("data") ? json.getAsJsonObject("data") : new JsonObject();
+        String maidId = data.has("maid_id") ? data.get("maid_id").getAsString() : "";
+        com.neko_tlm_bridge.event.GameEventHandler.setMonitoredMaidId(maidId);
+        LOGGER.info("Set monitored maid_id: {}", maidId);
+
+        JsonObject response = new JsonObject();
+        response.addProperty("type", Protocol.TYPE_CONFIG);
+        if (requestId != null) response.addProperty("request_id", requestId);
+        JsonObject resultData = new JsonObject();
+        resultData.addProperty("monitored_maid_id", maidId);
+        response.add("data", resultData);
+        conn.send(GSON.toJson(response));
+    }
+
     public void handleUseSkill(WebSocket conn, String requestId, JsonObject json) {
         if (minecraftServer == null) {
             sendError(conn, requestId, "Server not ready");

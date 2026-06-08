@@ -86,6 +86,7 @@ public class NekoTlmBridge {
             webSocketServer.tickPendingCommands();
         }
         NekoAttackTargetStore.tickCleanup();
+        GameEventHandler.onServerTick(event);
     }
 
     private static void onRegisterCommands(RegisterCommandsEvent event) {

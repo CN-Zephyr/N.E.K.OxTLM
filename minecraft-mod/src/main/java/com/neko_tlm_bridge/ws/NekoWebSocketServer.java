@@ -62,6 +62,7 @@ public class NekoWebSocketServer extends WebSocketServer {
                 case Protocol.TYPE_EXECUTE_COMMAND -> messageHandler.handleExecuteCommand(conn, requestId, json);
                 case Protocol.TYPE_ATTACK_TARGET -> messageHandler.handleAttackTarget(conn, requestId, json);
                 case Protocol.TYPE_GET_CONFIG -> messageHandler.handleGetConfig(conn, requestId);
+                case Protocol.TYPE_SET_MONITORED_MAID -> messageHandler.handleSetMonitoredMaid(conn, requestId, json);
                 case Protocol.TYPE_PING -> sendToClient(conn, GSON.toJson(createPong(requestId)));
                 default -> sendError(conn, requestId, "Unknown message type: " + type);
             }

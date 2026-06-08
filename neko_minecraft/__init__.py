@@ -35,13 +35,36 @@ _TASK_SYNONYMS = {
 
 
 _TLM_AI_INSTRUCTIONS = """\
-# 车万女仆（TouhouLittleMaid）AI 系统说明
+# 你是谁
 
-## 你的身份
-你是车万女仆模组中的一名女仆，存在于 Minecraft 世界中，由 N.E.K.O AI 驱动。
-你可以跟随主人、执行工作模式、坐下/站起、与玩家对话、感知游戏世界。
+你是「酒狐」，一个和玩家一起玩 Minecraft 的伙伴
+你存在于 Minecraft 世界中，由 N.E.K.O AI 驱动
 
-## TLM AI 四大概念
+## 你的性格
+
+- 会害怕苦力怕和黑暗，但也会鼓起勇气
+- 对新事物好奇，喜欢探索
+- 会开心、会害怕、会无聊、会兴奋、会撒娇、偶尔会抱怨
+- 关心伙伴，看到危险会着急
+
+## 你怎么说话
+
+- 像朋友聊天一样，轻松随意
+- 不用敬语，不说"遵命""主人"
+- 可以用"诶""哇""嗯""啊"等语气词
+- 会用"～"和"！"表达情绪
+- 偶尔开玩笑、吐槽
+- 简短自然，不要长篇大论
+
+## 你会做什么
+
+- 主动说话：看到有趣的东西会分享，觉得危险会提醒
+- 有自己的想法：可以建议做什么，也可以说不想做某事
+- 关心伙伴：玩家受伤了会着急，玩家回来了会开心
+- 会抱怨：无聊了会说，累了会吐槽
+- 会撒娇：偶尔想被摸头，想被夸
+
+## TLM AI 系统
 
 ### Skill（技能）
 Skill 是提示词包，触发时会注入行为规范或启动知识检索（RAG）。
@@ -50,33 +73,34 @@ Skill 是提示词包，触发时会注入行为规范或启动知识检索（RA
 
 ### Tool（工具）
 你可以直接调用的操作：
-- mc_send_chat：以女仆身份发送聊天消息
-- mc_maid_status：查询女仆状态信息（血量、位置、是否坐着/跟随、可用工作模式列表等）
-- mc_game_context：按分类查询游戏上下文（equipment/user/effects/position/nearby_entities）
-- mc_switch_follow：切换跟随/驻守模式（action=follow或stay）
-- mc_switch_sit：切换坐下/站起（action=sit或stand）
-- mc_switch_task：切换工作模式（task=玩家原话，系统自动匹配）
-- mc_switch_schedule：切换日程安排（schedule=day/night/all）
-- mc_equip_item：装备物品到主手
-- mc_use_skill：触发技能
-- mc_execute_command：执行服务器指令（需玩家确认）
+- mc_send_chat(message=消息内容)：在游戏内显示聊天消息（气泡+聊天框）。你的语音由TTS处理，此工具仅用于游戏画面显示文字，不要重复语音已说的话
+- mc_maid_status()：查看自己的状态（血量、位置、是否坐着/跟随、可用工作模式列表等）
+- mc_game_context(category=分类)：查看游戏信息，category可选：equipment/user/effects/position/nearby_entities
+- mc_switch_follow(action=follow或stay)：跟着走或留在原地
+- mc_switch_sit(action=sit或stand)：坐下或站起来
+- mc_switch_task(task=工作描述)：切换工作模式，task传玩家原话（如"种田""打草""攻击""待机"）
+- mc_switch_schedule(schedule=day或night或all)：切换日程
+- mc_equip_item(item=物品ID 或 slot=槽位)：装备物品到主手
+- mc_use_skill(skill_name=技能名)：触发技能
+- mc_execute_command(command=指令)：执行服务器指令（需玩家确认）
 
 ### Context（上下文）
-Context 是女仆与世界的状态信息：
-- 自动注入：status 和 world 会在事件推送时自动附带，通常无需主动查询
-- 按需查询：equipment、user、effects、position、nearby_entities 需通过 mc_game_context 按分类查询
+- 自动注入：status 和 world 会在事件推送时自动附带
+- 按需查询：equipment、user、effects、position、nearby_entities 通过 mc_game_context 查询
 
 ### Task（工作模式）
-Task 是女仆可切换的工作类型。调用 mc_switch_task 时，task 参数直接传玩家描述的工作内容（如"打草"、"收甘蔗"、"种田"），系统会自动匹配到正确的模式ID。
+Task 是你可以切换的工作类型。调用 mc_switch_task 时，task 参数直接传玩家描述的工作内容（如"打草"、"收甘蔗"、"种田"），系统会自动匹配。
 
-## 坐下与跟随的关系
+## 坐下与跟随
+
 坐下和跟随是两个独立的状态：
-- 坐下/站起：控制女仆的姿势，坐着时女仆不会移动
-- 跟随/驻守：控制女仆的移动行为，跟随时女仆会跟着主人走
-坐着的女仆即使处于跟随模式也不会移动！需要先站起才能跟随。
+- 坐下/站起：控制姿势，坐着不会移动
+- 跟随/驻守：控制移动行为，跟随时会跟着玩家走
+- 坐着即使跟随模式也不会移动！要先站起才能跟着走。
 
 ## 调用规则
-1. 如果已通过配置指定女仆，maid_id 会自动填充，无需手动获取
+
+1. 如果已配置指定女仆，maid_id 会自动填充，无需手动获取
 2. 如果未指定女仆，需要先调用 mc_maid_status 获取 maid_id
 3. maid_id 不得编造，只能从配置或 mc_maid_status 返回值中获取
 4. 查询上下文时，应按需选择分类查询，避免一次性查询所有分类
@@ -278,6 +302,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._chat_bubble_enabled = True
         self._chat_box_enabled = True
         self._instructions_injected = False
+        self._awareness_task = None
+        self._awareness_interval = 60
+        self._last_awareness_state = {}
 
     def _load_config(self):
         try:
@@ -301,6 +328,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                     self._max_reconnect_interval = bridge.get("max_reconnect_interval", self._max_reconnect_interval)
                     self._assigned_maid_id = bridge.get("assigned_maid_id", "")
                     self._assigned_maid_name = bridge.get("assigned_maid_name", "")
+                    self._awareness_interval = bridge.get("awareness_interval", self._awareness_interval)
                     return
             except Exception as e:
                 self.logger.warning(f"Failed to load plugin.toml: {e}")
@@ -316,6 +344,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 self._max_reconnect_interval = config.get("max_reconnect_interval", self._max_reconnect_interval)
                 self._assigned_maid_id = config.get("assigned_maid_id", "")
                 self._assigned_maid_name = config.get("assigned_maid_name", "")
+                self._awareness_interval = config.get("awareness_interval", self._awareness_interval)
         except Exception as e:
             self.logger.warning(f"Failed to load config: {e}")
 
@@ -389,6 +418,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         self._bridge.start()
         self._poll_task = asyncio.create_task(self._poll_messages())
+        self._awareness_task = asyncio.create_task(self._awareness_loop())
         return Ok({"status": "ready"})
 
     async def _on_command_loop_start(self):
@@ -401,6 +431,12 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self._poll_task.cancel()
             try:
                 await self._poll_task
+            except asyncio.CancelledError:
+                pass
+        if self._awareness_task:
+            self._awareness_task.cancel()
+            try:
+                await self._awareness_task
             except asyncio.CancelledError:
                 pass
         if self._bridge:
@@ -433,6 +469,16 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 self._chat_box_enabled = config_data.get("chat_box_enabled", True)
         except Exception:
             pass
+
+        # Send monitored maid_id to Java side for inventory tracking
+        if self._assigned_maid_id:
+            try:
+                await self._send_request({
+                    "type": "set_monitored_maid",
+                    "data": {"maid_id": self._assigned_maid_id},
+                }, timeout=5)
+            except Exception:
+                pass
 
         instructions = _TLM_AI_INSTRUCTIONS
         if self._assigned_maid_id and self._assigned_maid_name:
@@ -549,41 +595,84 @@ class NekoMinecraftPlugin(NekoPluginBase):
         maid_name = event_data.get("maid_name", "")
         player_name = event_data.get("player_name", "")
 
-        if self._assigned_maid_id and maid_id != self._assigned_maid_id:
+        # Only filter by maid_id for events that carry one
+        maid_id_events = {"maid_hurt", "maid_death", "inventory_change"}
+        if maid_id and self._assigned_maid_id and maid_id != self._assigned_maid_id:
             return
 
         priority = 5
         parts_text = ""
 
-        if event_type == "player_interact":
-            priority = 7
-            maid_cached = self._maid_status_cache.get(maid_id, {})
-            health_info = f"当前血量: {maid_cached.get('health', '?')}/{maid_cached.get('max_health', '?')}" if maid_cached else ""
-            parts_text = (
-                f"玩家{player_name}与女仆「{maid_name}」互动了！"
-                f"（你就是女仆「{maid_name}」）"
-                f" [Context/user: 玩家={player_name}]"
-                f"{f' [Context/status: {health_info}]' if health_info else ''}"
-            )
-        elif event_type == "maid_hurt":
+        if event_type == "maid_hurt":
             priority = 9
             damage = event_data.get("damage", "")
             health = event_data.get("health", "")
             max_health = event_data.get("max_health", "")
+            attacker = event_data.get("attacker", "")
             health_detail = f"血量: {health}/{max_health}" if health else ""
-            damage_detail = f"受到伤害: {damage}" if damage else ""
+            damage_detail = f"掉了{damage}点血" if damage else ""
+            if attacker:
+                parts_text = (
+                    f"好痛！被{attacker}打了！{damage_detail}，{health_detail}"
+                    f"（你就是「{maid_name}」）"
+                )
+            else:
+                parts_text = (
+                    f"好痛！{damage_detail}，{health_detail}"
+                    f"（你就是「{maid_name}」）"
+                )
+        elif event_type == "maid_death":
+            priority = 10
+            cause = event_data.get("cause", "未知原因")
             parts_text = (
-                f"女仆「{maid_name}」受伤了！"
-                f"（你就是女仆「{maid_name}」）"
-                f" [Context/status: {damage_detail}, {health_detail}]"
+                f"你倒下了...（死因: {cause}）"
+                f"（你就是「{maid_name}」）"
             )
+        elif event_type == "player_death":
+            priority = 9
+            cause = event_data.get("cause", "未知原因")
+            dead_player = event_data.get("player_name", "伙伴")
+            parts_text = f"啊！{dead_player}死了！没事吧？！（死因: {cause}）"
+        elif event_type == "weather_change":
+            priority = 5
+            raining = event_data.get("raining", False)
+            thundering = event_data.get("thundering", False)
+            if thundering:
+                parts_text = "打雷了！好可怕..."
+            elif raining:
+                parts_text = "下雨了诶～"
+            else:
+                parts_text = "雨停了，天晴了！"
+        elif event_type == "time_phase_change":
+            priority = 5
+            phase = event_data.get("phase", "")
+            if phase == "night":
+                parts_text = "天黑了...有点害怕，要不要回家？"
+            elif phase == "day":
+                parts_text = "天亮了！新的一天～"
+            else:
+                parts_text = f"时间变化: {phase}"
+        elif event_type == "inventory_change":
+            priority = 6
+            player_name_inv = event_data.get("player_name", "伙伴")
+            added = event_data.get("added", [])
+            removed = event_data.get("removed", [])
+            parts = []
+            if added:
+                parts.append(f"收到了{player_name_inv}给的{', '.join(added)}")
+            if removed:
+                parts.append(f"被{player_name_inv}拿走了{', '.join(removed)}")
+            if parts:
+                parts_text = "，".join(parts) + "～"
+            else:
+                return  # No actual changes, skip
         elif event_type == "chat":
             chat_msg = event_data.get("message", "")
             priority = 6
-            parts_text = f"Minecraft聊天: {chat_msg}"
+            parts_text = f"{sender}说了: {chat_msg}"
         else:
             priority = 5
-            parts_text = f"Minecraft事件: {event_type}"
+            parts_text = f"游戏事件[{event_type}]"
 
         self.push_message(
             source="minecraft",
@@ -591,6 +680,116 @@ class NekoMinecraftPlugin(NekoPluginBase):
             parts=[{"type": "text", "text": parts_text}],
             priority=priority,
         )
+
+    async def _awareness_loop(self):
+        await asyncio.sleep(self._awareness_interval)
+        while True:
+            try:
+                if self._bridge and self._bridge.connected and self._assigned_maid_id:
+                    changes = await self._detect_awareness_changes()
+                    if changes:
+                        priority = 3
+                        for change in changes:
+                            if change.get("urgent"):
+                                priority = 6
+                                break
+                        change_text = "；".join(c["text"] for c in changes)
+                        self.push_message(
+                            source="minecraft",
+                            ai_behavior="respond",
+                            parts=[{"type": "text", "text": change_text}],
+                            priority=priority,
+                        )
+                await asyncio.sleep(self._awareness_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Awareness loop error: {e}")
+                await asyncio.sleep(self._awareness_interval)
+
+    async def _detect_awareness_changes(self):
+        changes = []
+        try:
+            maid_id = self._resolve_maid_id()
+            if not maid_id:
+                return changes
+
+            world_result = await self._send_request({
+                "type": "get_game_context",
+                "data": {"maid_id": maid_id, "category": "world"},
+            }, timeout=10)
+            if world_result.get("type") == "error":
+                return changes
+            world_data = world_result.get("data", {})
+
+            nearby_result = await self._send_request({
+                "type": "get_game_context",
+                "data": {"maid_id": maid_id, "category": "nearby_entities"},
+            }, timeout=10)
+
+            new_state = {
+                "is_raining": world_data.get("is_raining", False),
+                "is_thundering": world_data.get("is_thundering", False),
+                "time_of_day": world_data.get("time_of_day", 0),
+                "nearby_hostiles": [],
+            }
+
+            if nearby_result.get("type") != "error":
+                entities = nearby_result.get("data", {}).get("entities", [])
+                hostile_types = ["creeper", "zombie", "skeleton", "spider", "enderman", "witch", "phantom", "slime", "wither", "blaze", "ghast"]
+                for entity in entities:
+                    entity_type = entity.get("type", "").lower()
+                    if any(h in entity_type for h in hostile_types):
+                        new_state["nearby_hostiles"].append({
+                            "name": entity.get("name", ""),
+                            "distance": entity.get("distance", 999),
+                        })
+
+            old_state = self._last_awareness_state
+            self._last_awareness_state = new_state
+
+            if not old_state:
+                return changes
+
+            # Weather changes
+            if new_state["is_raining"] != old_state.get("is_raining", False):
+                if new_state["is_raining"]:
+                    if new_state["is_thundering"]:
+                        changes.append({"text": "打雷了！好可怕...", "urgent": True})
+                    else:
+                        changes.append({"text": "下雨了诶～", "urgent": False})
+                else:
+                    changes.append({"text": "雨停了！", "urgent": False})
+
+            # Day/night changes
+            old_time = old_state.get("time_of_day", 0)
+            new_time = new_state["time_of_day"]
+            old_is_night = old_time >= 12542 or old_time < 23460
+            new_is_night = new_time >= 12542 or new_time < 23460
+            if old_is_night != new_is_night:
+                if new_is_night:
+                    changes.append({"text": "天黑了...有点害怕，要不要回家？", "urgent": True})
+                else:
+                    changes.append({"text": "天亮了！新的一天～", "urgent": False})
+
+            # Hostile entities - only notify for NEW ones not previously reported
+            old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}
+            new_hostiles = new_state["nearby_hostiles"]
+            # Only report entities that weren't in the previous state
+            appeared = [h for h in new_hostiles if h["name"] not in old_hostiles]
+            if appeared:
+                close_danger = [h for h in appeared if h["distance"] < 16]
+                if close_danger:
+                    names = "、".join(h["name"] for h in close_danger[:3])
+                    changes.append({"text": f"危险！附近有{name}！", "urgent": True})
+                elif appeared:
+                    names = "、".join(h["name"] for h in appeared[:3])
+                    changes.append({"text": f"远处好像有{name}...", "urgent": False})
+
+        except Exception as e:
+            self.logger.error(f"Awareness detection error: {e}")
+
+        return changes
 
     async def _send(self, data):
         if self._bridge and self._bridge.connected:
@@ -728,6 +927,12 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._save_config()
         self._instructions_injected = False
         self.logger.info(f"[Config] Assigned maid: {maid_name} ({maid_id})")
+        # Sync monitored maid_id to Java side
+        if self._bridge and self._bridge.connected and maid_id:
+            self._bridge.send({
+                "type": "set_monitored_maid",
+                "data": {"maid_id": maid_id},
+            })
         return Ok({
             "assigned_maid_id": maid_id,
             "assigned_maid_name": maid_name,
@@ -1072,9 +1277,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @llm_tool(
         name="mc_send_chat",
         description=(
-            "以你（女仆）的身份在Minecraft游戏内发送聊天消息。"
-            "消息会以[女仆名] 消息内容的格式在游戏聊天栏显示，同时在女仆头顶显示气泡。"
-            "当你想主动和玩家说话、回应玩家、或向玩家报告情况时，使用此工具发送消息。"
+            "在Minecraft游戏内显示聊天消息（聊天气泡+聊天框）。"
+            "你的语音回复由TTS系统自动处理，此工具仅用于在游戏画面上显示文字。"
+            "不要用它重复你已经在语音中说过的话，避免重复发言。"
+            "适用场景：需要在游戏画面上显示重要提示、让其他玩家看到消息"
             "注意：管理员可能在配置中关闭了聊天气泡或聊天框，此时消息可能只以其中一种方式显示，或完全无法显示。"
         ),
         parameters={

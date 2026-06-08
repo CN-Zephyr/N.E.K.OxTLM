@@ -13,6 +13,8 @@ public class ModConfig {
     public static final ModConfigSpec.BooleanValue COMMAND_EXECUTION_ENABLED;
     public static final ModConfigSpec.BooleanValue CHAT_BUBBLE_ENABLED;
     public static final ModConfigSpec.BooleanValue CHAT_BOX_ENABLED;
+    public static final ModConfigSpec.BooleanValue WEATHER_EVENT_ENABLED;
+    public static final ModConfigSpec.BooleanValue TIME_EVENT_ENABLED;
 
     static {
         Builder builder = new Builder();
@@ -39,6 +41,12 @@ public class ModConfig {
         CHAT_BOX_ENABLED = builder
                 .translation("neko_tlm_bridge.config.bridge.chatBoxEnabled")
                 .define("chatBoxEnabled", true);
+        WEATHER_EVENT_ENABLED = builder
+                .translation("neko_tlm_bridge.config.bridge.weatherEventEnabled")
+                .define("weatherEventEnabled", true);
+        TIME_EVENT_ENABLED = builder
+                .translation("neko_tlm_bridge.config.bridge.timeEventEnabled")
+                .define("timeEventEnabled", true);
         builder.pop();
 
         SPEC = builder.build();

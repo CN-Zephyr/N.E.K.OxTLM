@@ -62,3 +62,4 @@ reconnect_interval = 5
 max_reconnect_interval = 60
 assigned_maid_id = ""
 assigned_maid_name = ""
+awareness_interval = 60
