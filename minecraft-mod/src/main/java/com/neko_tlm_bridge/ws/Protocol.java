@@ -32,6 +32,8 @@ public final class Protocol {
     public static final String EVENT_WEATHER_CHANGE = "weather_change";
     public static final String EVENT_TIME_PHASE_CHANGE = "time_phase_change";
     public static final String EVENT_INVENTORY_CHANGE = "inventory_change";
+    public static final String EVENT_ADVANCEMENT = "advancement";
+    public static final String EVENT_BIOME_CHANGE = "biome_change";
 
     private Protocol() {}
 }

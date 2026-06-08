@@ -117,19 +117,59 @@ public class GameEventHandler {
     private static long lastWeatherCheckTick = 0;
     private static final long WEATHER_CHECK_INTERVAL = 100; // Check every 5 seconds (100 ticks)
 
+    // Biome change tracking with debounce to prevent bouncing at boundaries
+    private static String lastReportedBiome = "";
+    private static String candidateBiome = "";
+    private static long candidateBiomeStartTick = 0;
+    private static final long BIOME_DEBOUNCE_TICKS = 200; // Must stay in new biome for 10 seconds
+
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
-        if (!ModConfig.WEATHER_EVENT_ENABLED.get() && !ModConfig.TIME_EVENT_ENABLED.get()) return;
 
         net.minecraft.server.MinecraftServer server = event.getServer();
         if (server == null) return;
 
-        long currentTick = server.getLevel(Level.OVERWORLD).getGameTime();
-        if (currentTick - lastWeatherCheckTick < WEATHER_CHECK_INTERVAL) return;
-        lastWeatherCheckTick = currentTick;
-
         ServerLevel overworld = server.getLevel(Level.OVERWORLD);
         if (overworld == null) return;
+
+        long currentTick = overworld.getGameTime();
+
+        // Biome change detection (runs every tick for debounce accuracy)
+        if (!monitoredMaidId.isEmpty()) {
+            EntityMaid maid = findMaidById(monitoredMaidId, server);
+            if (maid != null) {
+                String currentBiome = maid.level().getBiome(maid.blockPosition())
+                        .unwrapKey()
+                        .map(k -> k.location().toString())
+                        .orElse("unknown");
+                if (currentBiome.equals(lastReportedBiome)) {
+                    // Back to reported biome, reset candidate
+                    candidateBiome = "";
+                } else if (currentBiome.equals(candidateBiome)) {
+                    // Still in candidate biome, check debounce
+                    if (currentTick - candidateBiomeStartTick >= BIOME_DEBOUNCE_TICKS) {
+                        JsonObject eventData = new JsonObject();
+                        eventData.addProperty("event_type", Protocol.EVENT_BIOME_CHANGE);
+                        eventData.addProperty("maid_id", maid.getStringUUID());
+                        eventData.addProperty("maid_name", maid.getName().getString());
+                        eventData.addProperty("biome", currentBiome);
+                        eventData.addProperty("old_biome", lastReportedBiome);
+                        webSocketServer.broadcastEvent(eventData);
+                        lastReportedBiome = currentBiome;
+                        candidateBiome = "";
+                    }
+                } else {
+                    // New biome detected, start debounce timer
+                    candidateBiome = currentBiome;
+                    candidateBiomeStartTick = currentTick;
+                }
+            }
+        }
+
+        // Weather and time checks (throttled)
+        if (!ModConfig.WEATHER_EVENT_ENABLED.get() && !ModConfig.TIME_EVENT_ENABLED.get()) return;
+        if (currentTick - lastWeatherCheckTick < WEATHER_CHECK_INTERVAL) return;
+        lastWeatherCheckTick = currentTick;
 
         // Weather change detection
         if (ModConfig.WEATHER_EVENT_ENABLED.get()) {
@@ -159,6 +199,23 @@ public class GameEventHandler {
                 lastIsNight = isNight;
             }
         }
+    }
+
+    @SubscribeEvent
+    public static void onAdvancement(net.neoforged.neoforge.event.entity.player.AdvancementEvent event) {
+        if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
+        net.minecraft.advancements.AdvancementHolder holder = event.getAdvancement();
+        net.minecraft.advancements.Advancement advancement = holder.value();
+        // Only report displayable advancements (visible in toast)
+        if (advancement.display().isEmpty()) return;
+
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_ADVANCEMENT);
+        eventData.addProperty("player_name", event.getEntity().getName().getString());
+        net.minecraft.advancements.DisplayInfo display = advancement.display().get();
+        eventData.addProperty("title", display.getTitle().getString());
+        eventData.addProperty("description", display.getDescription().getString());
+        webSocketServer.broadcastEvent(eventData);
     }
 
     @SubscribeEvent

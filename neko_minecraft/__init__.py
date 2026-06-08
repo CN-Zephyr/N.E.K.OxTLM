@@ -633,6 +633,17 @@ class NekoMinecraftPlugin(NekoPluginBase):
             cause = event_data.get("cause", "未知原因")
             dead_player = event_data.get("player_name", "伙伴")
             parts_text = f"啊！{dead_player}死了！没事吧？！（死因: {cause}）"
+        elif event_type == "advancement":
+            priority = 7
+            adv_player = event_data.get("player_name", "伙伴")
+            title = event_data.get("title", "某个成就")
+            parts_text = f"哇！{adv_player}解锁了成就「{title}」！好厉害！"
+        elif event_type == "biome_change":
+            priority = 5
+            biome = event_data.get("biome", "")
+            # Extract readable name from resource location (e.g. "minecraft:plains" -> "plains")
+            biome_name = biome.split(":")[-1] if ":" in biome else biome
+            parts_text = f"周围的环境变了...现在来到了{biome_name}！"
         elif event_type == "weather_change":
             priority = 5
             raining = event_data.get("raining", False)
