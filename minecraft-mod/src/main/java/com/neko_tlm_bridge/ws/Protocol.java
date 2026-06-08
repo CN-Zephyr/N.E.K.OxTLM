@@ -23,6 +23,7 @@ public final class Protocol {
     public static final String TYPE_COMMAND_EXECUTION_RESULT = "command_execution_result";
     public static final String TYPE_ATTACK_TARGET_RESULT = "attack_target_result";
     public static final String TYPE_CONFIG = "config";
+    public static final String TYPE_CONFIG_UPDATE = "config_update";
 
     private Protocol() {}
 }

@@ -103,6 +103,24 @@ public class NekoWebSocketServer extends WebSocketServer {
         }
     }
 
+    public void broadcastConfigUpdate() {
+        if (clients.isEmpty()) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", Protocol.TYPE_CONFIG_UPDATE);
+        JsonObject data = new JsonObject();
+        data.addProperty("neko_mode_enabled", ModConfig.NEKO_MODE_ENABLED.get());
+        data.addProperty("event_push_enabled", ModConfig.EVENT_PUSH_ENABLED.get());
+        data.addProperty("command_execution_enabled", ModConfig.COMMAND_EXECUTION_ENABLED.get());
+        data.addProperty("chat_bubble_enabled", ModConfig.CHAT_BUBBLE_ENABLED.get());
+        data.addProperty("chat_box_enabled", ModConfig.CHAT_BOX_ENABLED.get());
+        data.addProperty("websocket_port", ModConfig.WEBSOCKET_PORT.get());
+        msg.add("data", data);
+        String json = GSON.toJson(msg);
+        for (WebSocket client : clients) {
+            sendToClient(client, json);
+        }
+    }
+
     public boolean hasClients() {
         return !clients.isEmpty();
     }

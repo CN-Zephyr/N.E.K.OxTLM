@@ -2,6 +2,7 @@ package com.neko_tlm_bridge.client;
 
 import com.neko_tlm_bridge.config.ModConfig;
 import com.neko_tlm_bridge.tlm.NekoWebSocketServerHolder;
+import com.neko_tlm_bridge.ws.NekoWebSocketServer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -15,11 +16,15 @@ public class NekoConfigScreen extends Screen {
     private EditBox portEditBox;
     private Button eventPushButton;
     private Button commandExecutionButton;
+    private Button chatBubbleButton;
+    private Button chatBoxButton;
     private Button doneButton;
 
     private boolean nekoModeEnabled;
     private boolean eventPushEnabled;
     private boolean commandExecutionEnabled;
+    private boolean chatBubbleEnabled;
+    private boolean chatBoxEnabled;
 
     public NekoConfigScreen(Screen parent) {
         super(Component.translatable("neko_tlm_bridge.config.title"));
@@ -33,6 +38,8 @@ public class NekoConfigScreen extends Screen {
         nekoModeEnabled = ModConfig.NEKO_MODE_ENABLED.get();
         eventPushEnabled = ModConfig.EVENT_PUSH_ENABLED.get();
         commandExecutionEnabled = ModConfig.COMMAND_EXECUTION_ENABLED.get();
+        chatBubbleEnabled = ModConfig.CHAT_BUBBLE_ENABLED.get();
+        chatBoxEnabled = ModConfig.CHAT_BOX_ENABLED.get();
 
         int centerX = this.width / 2;
 
@@ -69,6 +76,24 @@ public class NekoConfigScreen extends Screen {
         ).bounds(centerX - 100, 140, 200, 20).build();
         this.addRenderableWidget(commandExecutionButton);
 
+        chatBubbleButton = Button.builder(
+                toggleText("neko_tlm_bridge.config.bridge.chatBubbleEnabled", chatBubbleEnabled),
+                button -> {
+                    chatBubbleEnabled = !chatBubbleEnabled;
+                    button.setMessage(toggleText("neko_tlm_bridge.config.bridge.chatBubbleEnabled", chatBubbleEnabled));
+                }
+        ).bounds(centerX - 100, 170, 200, 20).build();
+        this.addRenderableWidget(chatBubbleButton);
+
+        chatBoxButton = Button.builder(
+                toggleText("neko_tlm_bridge.config.bridge.chatBoxEnabled", chatBoxEnabled),
+                button -> {
+                    chatBoxEnabled = !chatBoxEnabled;
+                    button.setMessage(toggleText("neko_tlm_bridge.config.bridge.chatBoxEnabled", chatBoxEnabled));
+                }
+        ).bounds(centerX - 100, 200, 200, 20).build();
+        this.addRenderableWidget(chatBoxButton);
+
         doneButton = Button.builder(
                 Component.translatable("neko_tlm_bridge.config.done"),
                 button -> {
@@ -97,8 +122,8 @@ public class NekoConfigScreen extends Screen {
                     ? Component.translatable("neko_tlm_bridge.config.connection_connected")
                     : Component.translatable("neko_tlm_bridge.config.connection_disconnected");
             int statusColor = connected ? 0x55FF55 : 0xFF5555;
-            guiGraphics.drawString(this.font, statusLabel, centerX - 100, 170, 0xA0A0A0);
-            guiGraphics.drawString(this.font, statusValue, centerX + 100 - this.font.width(statusValue), 170, statusColor);
+            guiGraphics.drawString(this.font, statusLabel, centerX - 100, 230, 0xA0A0A0);
+            guiGraphics.drawString(this.font, statusValue, centerX + 100 - this.font.width(statusValue), 230, statusColor);
         } else {
             guiGraphics.drawCenteredString(this.font, Component.translatable("neko_tlm_bridge.config.neko_mode_hint"), this.width / 2, 70, 0xA0A0A0);
         }
@@ -120,6 +145,8 @@ public class NekoConfigScreen extends Screen {
         portEditBox.visible = visible;
         eventPushButton.visible = visible;
         commandExecutionButton.visible = visible;
+        chatBubbleButton.visible = visible;
+        chatBoxButton.visible = visible;
         if (!visible) {
             portEditBox.setFocused(false);
         }
@@ -136,6 +163,13 @@ public class NekoConfigScreen extends Screen {
         }
         ModConfig.EVENT_PUSH_ENABLED.set(eventPushEnabled);
         ModConfig.COMMAND_EXECUTION_ENABLED.set(commandExecutionEnabled);
+        ModConfig.CHAT_BUBBLE_ENABLED.set(chatBubbleEnabled);
+        ModConfig.CHAT_BOX_ENABLED.set(chatBoxEnabled);
         ModConfig.SPEC.save();
+
+        NekoWebSocketServer server = NekoWebSocketServerHolder.getServer();
+        if (server != null) {
+            server.broadcastConfigUpdate();
+        }
     }
 }

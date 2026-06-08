@@ -274,6 +274,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._assigned_maid_id = ""
         self._assigned_maid_name = ""
         self._command_execution_enabled = False
+        self._chat_bubble_enabled = True
+        self._chat_box_enabled = True
         self._instructions_injected = False
 
     def _load_config(self):
@@ -426,6 +428,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
             if config_result.get("type") == "config":
                 config_data = config_result.get("data", {})
                 self._command_execution_enabled = config_data.get("command_execution_enabled", False)
+                self._chat_bubble_enabled = config_data.get("chat_bubble_enabled", True)
+                self._chat_box_enabled = config_data.get("chat_box_enabled", True)
         except Exception:
             pass
 
@@ -439,6 +443,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
             priority=0,
         )
         self.logger.info("[TLM] Injected AI calling instructions into LLM context")
+
+    def _sync_config(self, config_data):
+        self._command_execution_enabled = config_data.get("command_execution_enabled", False)
+        self._chat_bubble_enabled = config_data.get("chat_bubble_enabled", True)
+        self._chat_box_enabled = config_data.get("chat_box_enabled", True)
 
     async def _handle_message(self, data):
         msg_type = data.get("type", "")
@@ -494,10 +503,15 @@ class NekoMinecraftPlugin(NekoPluginBase):
 
         if msg_type == "config":
             config_data = data.get("data", {})
-            self._command_execution_enabled = config_data.get("command_execution_enabled", False)
+            self._sync_config(config_data)
             if request_id and request_id in self._request_futures:
                 self._request_futures[request_id].set_result(data)
                 del self._request_futures[request_id]
+            return
+
+        if msg_type == "config_update":
+            config_data = data.get("data", {})
+            self._sync_config(config_data)
             return
 
         if msg_type == "event":
@@ -1055,10 +1069,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @llm_tool(
         name="mc_send_chat",
         description=(
-            "以你（女仆）的身份在Minecraft游戏内发送聊天消息，所有在线玩家都能看到。"
-            "这是N.E.K.O桥接独有的能力，TLM原生AI不具备直接发送聊天消息的功能。"
-            "消息会以[女仆名] 消息内容的格式在游戏内显示。"
+            "以你（女仆）的身份在Minecraft游戏内发送聊天消息。"
+            "消息会以[女仆名] 消息内容的格式在游戏聊天栏显示，同时在女仆头顶显示气泡。"
             "当你想主动和玩家说话、回应玩家、或向玩家报告情况时，使用此工具发送消息。"
+            "注意：管理员可能在配置中关闭了聊天气泡或聊天框，此时消息可能只以其中一种方式显示，或完全无法显示。"
         ),
         parameters={
             "type": "object",
@@ -1073,16 +1087,18 @@ class NekoMinecraftPlugin(NekoPluginBase):
         },
     )
     async def mc_send_chat(self, *, message, maid_id=None, **_):
+        if not self._chat_bubble_enabled and not self._chat_box_enabled:
+            return Err("聊天功能已被管理员关闭（气泡和聊天框均未启用）")
         if not self.connected:
-            return {"output": {"error": "Not connected to Minecraft"}, "is_error": True, "error": "NOT_CONNECTED"}
+            return Err("Not connected to Minecraft")
         resolved_id = self._resolve_maid_id(maid_id)
         if not resolved_id:
-            return {"output": {"error": "No maid_id available. Call mc_maid_status first or assign a maid in config."}, "is_error": True, "error": "NO_MAID_ID"}
+            return Err("No maid_id available. Call mc_maid_status first or assign a maid in config.")
         self._bridge.send({
             "type": "send_chat",
             "data": {"maid_id": resolved_id, "message": message},
         })
-        return {"success": True}
+        return Ok({"success": True})
 
     @llm_tool(
         name="mc_game_context",

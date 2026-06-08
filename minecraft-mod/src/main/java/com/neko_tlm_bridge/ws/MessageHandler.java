@@ -127,14 +127,18 @@ public class MessageHandler {
                 return;
             }
             String maidName = maid.getName().getString();
-            Component chatMessage = Component.literal("[" + maidName + "] " + message);
-            minecraftServer.getPlayerList().broadcastSystemMessage(chatMessage, false);
+            if (ModConfig.CHAT_BOX_ENABLED.get()) {
+                Component chatMessage = Component.literal("[" + maidName + "] " + message);
+                minecraftServer.getPlayerList().broadcastSystemMessage(chatMessage, false);
+            }
 
-            maid.getChatBubbleManager().addChatBubble(
-                    com.github.tartaricacid.touhoulittlemaid.entity.chatbubble.implement.TextChatBubbleData.type2(
-                            Component.literal(message)
-                    )
-            );
+            if (ModConfig.CHAT_BUBBLE_ENABLED.get()) {
+                maid.getChatBubbleManager().addChatBubble(
+                        com.github.tartaricacid.touhoulittlemaid.entity.chatbubble.implement.TextChatBubbleData.type2(
+                                Component.literal(message)
+                        )
+                );
+            }
 
             JsonObject response = new JsonObject();
             response.addProperty("type", Protocol.TYPE_CHAT_RESULT);
@@ -836,6 +840,8 @@ public class MessageHandler {
         data.addProperty("neko_mode_enabled", ModConfig.NEKO_MODE_ENABLED.get());
         data.addProperty("event_push_enabled", ModConfig.EVENT_PUSH_ENABLED.get());
         data.addProperty("command_execution_enabled", ModConfig.COMMAND_EXECUTION_ENABLED.get());
+        data.addProperty("chat_bubble_enabled", ModConfig.CHAT_BUBBLE_ENABLED.get());
+        data.addProperty("chat_box_enabled", ModConfig.CHAT_BOX_ENABLED.get());
         data.addProperty("websocket_port", ModConfig.WEBSOCKET_PORT.get());
         response.add("data", data);
         conn.send(GSON.toJson(response));
