@@ -1,0 +1,13 @@
+*
+!.gitignore
+!README.md
+!使用教程.md
+!minecraft-mod/
+!minecraft-mod/**
+!neko_minecraft/
+!neko_minecraft/**
+
+minecraft-mod/.gradle/
+minecraft-mod/build/
+minecraft-mod/maven_cache/
+minecraft-mod/*.class
