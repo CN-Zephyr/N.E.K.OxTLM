@@ -79,7 +79,7 @@ public class MessageHandler {
             JsonObject data = new JsonObject();
             data.add("maids", maidsArray);
             response.add("data", data);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
         });
     }
 
@@ -107,7 +107,7 @@ public class MessageHandler {
             resultData.addProperty("success", success);
             resultData.addProperty("command", command);
             response.add("data", resultData);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
         });
     }
 
@@ -146,7 +146,7 @@ public class MessageHandler {
             JsonObject resultData = new JsonObject();
             resultData.addProperty("success", true);
             response.add("data", resultData);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
         });
     }
 
@@ -181,7 +181,7 @@ public class MessageHandler {
             }
 
             response.add("data", contextData);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
         });
     }
 
@@ -921,7 +921,7 @@ public class MessageHandler {
             }
             resultData.add("target_names", targetNames);
             response.add("data", resultData);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
 
             LOGGER.info("Set attack target for maid {} -> {} target(s): {}", maid.getName().getString(), allEntries.size(),
                     allEntries.stream().map(e -> e.targetName).reduce((a, b) -> a + ", " + b).orElse(""));
@@ -940,7 +940,7 @@ public class MessageHandler {
         data.addProperty("chat_box_enabled", ModConfig.CHAT_BOX_ENABLED.get());
         data.addProperty("websocket_port", ModConfig.WEBSOCKET_PORT.get());
         response.add("data", data);
-        conn.send(GSON.toJson(response));
+        sendJson(conn,response);
     }
 
     public void handleSetMonitoredMaid(WebSocket conn, String requestId, JsonObject json) {
@@ -955,7 +955,7 @@ public class MessageHandler {
         JsonObject resultData = new JsonObject();
         resultData.addProperty("monitored_maid_id", maidId);
         response.add("data", resultData);
-        conn.send(GSON.toJson(response));
+        sendJson(conn,response);
     }
 
     public void handleUseSkill(WebSocket conn, String requestId, JsonObject json) {
@@ -983,7 +983,7 @@ public class MessageHandler {
                 }
                 resultData.add("available_skills", availableArray);
                 response.add("data", resultData);
-                conn.send(GSON.toJson(response));
+                sendJson(conn,response);
                 return;
             }
 
@@ -992,7 +992,7 @@ public class MessageHandler {
                 resultData.addProperty("success", false);
                 resultData.addProperty("error", "Maid not found");
                 response.add("data", resultData);
-                conn.send(GSON.toJson(response));
+                sendJson(conn,response);
                 return;
             }
 
@@ -1021,8 +1021,14 @@ public class MessageHandler {
             }
 
             response.add("data", resultData);
-            conn.send(GSON.toJson(response));
+            sendJson(conn,response);
         });
+    }
+
+    private void sendJson(WebSocket conn, JsonObject json) {
+        if (conn != null && conn.isOpen()) {
+            conn.send(GSON.toJson(json));
+        }
     }
 
     private void sendError(WebSocket conn, String requestId, String errorMessage) {
@@ -1032,8 +1038,6 @@ public class MessageHandler {
         JsonObject data = new JsonObject();
         data.addProperty("message", errorMessage);
         error.add("data", data);
-        if (conn != null && conn.isOpen()) {
-            conn.send(GSON.toJson(error));
-        }
+        sendJson(conn, error);
     }
 }

@@ -422,6 +422,13 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self.logger.info(f"Event loop: {type(asyncio.get_event_loop())}")
         if self._assigned_maid_id:
             self.logger.info(f"[Config] Assigned maid: {self._assigned_maid_name} ({self._assigned_maid_id})")
+
+        # Clean up old resources to prevent leaks on re-invoke
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+        if self._bridge:
+            self._bridge.stop()
+
         self._bridge = _WSBridge(
             ws_url=self._ws_url,
             logger=self.logger,
@@ -429,11 +436,14 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         self._bridge.start()
         self._poll_task = asyncio.create_task(self._poll_messages())
+        self._instructions_injected = False
         self.logger.info(f"[Startup] Bridge started, maid_id={self._assigned_maid_id}")
         return Ok({"status": "ready"})
 
     async def _on_command_loop_start(self):
         self.logger.info("[CommandLoop] Starting message poll on command loop")
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
         self._poll_task = asyncio.create_task(self._poll_messages())
         if not self._awareness_task:
             self._awareness_task = asyncio.create_task(self._awareness_loop())
@@ -818,47 +828,40 @@ class NekoMinecraftPlugin(NekoPluginBase):
 
             # === 3. Proactive inventory sharing ===
             new_inventory = new_state["maid_inventory"]
+            torch_keywords = ["torch", "soul_torch"]
+            has_torches = any(any(tk in item.get("item", "") for tk in torch_keywords) for item in new_inventory)
             if new_inventory:
                 food_keywords = ["bread", "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
                                  "cooked_cod", "cooked_salmon", "baked_potato", "golden_carrot", "apple",
                                  "melon_slice", "cookie", "cake", "pumpkin_pie"]
-                torch_keywords = ["torch", "soul_torch"]
                 has_food = any(any(fk in item.get("item", "") for fk in food_keywords) for item in new_inventory)
-                has_torches = any(any(tk in item.get("item", "") for tk in torch_keywords) for item in new_inventory)
 
                 # Suggest food when player health is below 70% (5-minute cooldown)
                 if has_food and new_player_health < player_max_health * 0.7 and now - self._last_food_offer_time > 300:
                     self._last_food_offer_time = now
                     changes.append({"text": "询问玩家饿不饿？我这里有点吃的～", "urgent": False})
-                # Suggest torches when underground and dark (covered by dark cave logic below)
-                elif has_torches and new_state["is_underground"] and new_state["light_level"] < 7:
-                    pass  # Handled by dark cave detection below
 
             # === 4. Dark cave torch suggestion (10-minute cooldown) ===
             if (new_state["is_underground"] and new_state["light_level"] < 7
                     and now - self._last_dark_warn_time > 600):
                 self._last_dark_warn_time = now
-                has_torches = any(any(tk in item.get("item", "") for tk in ["torch", "soul_torch"])
-                                  for item in new_state["maid_inventory"])
                 if has_torches:
                     changes.append({"text": "这里好暗...询问玩家要不要我帮忙插火把？", "urgent": False})
                 else:
                     changes.append({"text": "这里好暗...表达有点害怕，可惜没有火把了", "urgent": False})
 
-            # Hostile entities - only notify for NEW ones not previously reported
-            # Close ones are urgent (with cooldown), far ones are context only
+            # Hostile entities - only notify for close ones (urgent, with cooldown)
             old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}
             new_hostiles = new_state["nearby_hostiles"]
             appeared = [h for h in new_hostiles if h["name"] not in old_hostiles]
-            if appeared:
-                close_danger = [h for h in appeared if h["distance"] < 16]
-                if close_danger and now - self._last_hostile_warn_time > 180:
-                    self._last_hostile_warn_time = now
-                    names = "、".join(h["name"] for h in close_danger[:3])
-                    changes.append({"text": f"危险！附近有{names}！", "urgent": True})
-                elif appeared:
-                    names = "、".join(h["name"] for h in appeared[:3])
-                    changes.append({"text": f"远处好像有{names}...", "urgent": False})
+            close_danger = [h for h in appeared if h["distance"] < 10]
+            if close_danger and now - self._last_hostile_warn_time > 180:
+                self._last_hostile_warn_time = now
+                from collections import Counter
+                counts = Counter(h["name"] for h in close_danger)
+                parts = [f"{name}x{count}" if count > 1 else name for name, count in counts.items()]
+                names = "、".join(parts)
+                changes.append({"text": f"危险！附近有{names}！", "urgent": True})
 
         except Exception as e:
             self.logger.error(f"Awareness detection error: {e}")
@@ -870,6 +873,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self._bridge.send(data)
 
     async def _send_request(self, data, timeout=30):
+        if not self._bridge or not self._bridge.connected:
+            return {"type": "error", "data": {"message": "Not connected to Minecraft"}}
         import uuid
         request_id = str(uuid.uuid4())
         data["request_id"] = request_id

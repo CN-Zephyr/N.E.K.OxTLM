@@ -255,6 +255,9 @@ public class GameEventHandler {
         EntityMaid maid = findMaidById(monitoredMaidId, player.getServer());
         if (maid == null) return;
 
+        // Only track if the player is the maid's owner
+        if (maid.getOwner() == null || !maid.getOwner().getUUID().equals(player.getUUID())) return;
+
         // Take new snapshot
         Map<Integer, String> newSnapshot = new HashMap<>();
         ItemStackHandler inv = maid.getMaidInv();

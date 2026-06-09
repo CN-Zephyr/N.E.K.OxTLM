@@ -91,7 +91,16 @@ public class NekoAttackTargetStore {
         while (iter.hasNext()) {
             var entry = iter.next();
             TargetQueue queue = entry.getValue();
+            // Record how many entries before currentIndex will be removed
+            int removedBeforeCurrent = 0;
+            for (int i = 0; i < queue.currentIndex && i < queue.entries.size(); i++) {
+                if (now - queue.entries.get(i).setAt > EXPIRE_MS) {
+                    removedBeforeCurrent++;
+                }
+            }
             queue.entries.removeIf(e -> now - e.setAt > EXPIRE_MS);
+            queue.currentIndex -= removedBeforeCurrent;
+            if (queue.currentIndex < 0) queue.currentIndex = 0;
             if (queue.isDone() || queue.entries.isEmpty()) {
                 iter.remove();
             }
