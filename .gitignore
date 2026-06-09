@@ -1,6 +1,7 @@
 *
 !.gitignore
 !README.md
+!CHANGELOG.md
 !使用教程.md
 !minecraft-mod/
 !minecraft-mod/**
