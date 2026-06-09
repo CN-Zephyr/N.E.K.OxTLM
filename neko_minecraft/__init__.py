@@ -206,7 +206,10 @@ class _WSBridge:
                     try:
                         data = json.loads(raw)
                         if data.get("type") != "pong":
-                            self._logger.info(f"[WSBridge] recv: {raw[:300]}")
+                            if data.get("type") == "game_context":
+                                self._logger.debug(f"[WSBridge] recv: {raw[:300]}")
+                            else:
+                                self._logger.info(f"[WSBridge] recv: {raw[:300]}")
                         self._recv_queue.put(data)
                     except json.JSONDecodeError:
                         self._logger.warning(f"Invalid JSON: {raw}")
@@ -306,10 +309,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._awareness_interval = 60
         self._last_awareness_state = {}
         self._last_low_health_warn_time = 0  # Cooldown for low health warnings
-        self._last_dark_warn_time = 0  # Cooldown for dark cave warnings
         self._last_fire_warn_time = 0  # Cooldown for fire warnings
         self._last_drown_warn_time = 0  # Cooldown for drowning warnings
+        self._last_hostile_warn_time = 0  # Cooldown for hostile entity warnings
         self._last_food_offer_time = 0  # Cooldown for food offering
+        self._last_dark_warn_time = 0  # Cooldown for dark cave warnings
         self._pending_revenge = None  # {"killer": "...", "cause": "..."}
         self._was_dead = False
 
@@ -709,18 +713,14 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 if self._bridge and self._bridge.connected and maid_id:
                     changes = await self._detect_awareness_changes()
                     if changes:
-                        priority = 3
-                        for change in changes:
-                            if change.get("urgent"):
-                                priority = 6
-                                break
                         change_text = "；".join(c["text"] for c in changes)
+                        has_urgent = any(c.get("urgent") for c in changes)
                         self.logger.info(f"[Awareness] Pushing: {change_text}")
                         self.push_message(
                             source="minecraft",
                             ai_behavior="respond",
                             parts=[{"type": "text", "text": change_text}],
-                            priority=priority,
+                            priority=6 if has_urgent else 3,
                         )
                 await asyncio.sleep(self._awareness_interval)
             except asyncio.CancelledError:
@@ -826,7 +826,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 has_food = any(any(fk in item.get("item", "") for fk in food_keywords) for item in new_inventory)
                 has_torches = any(any(tk in item.get("item", "") for tk in torch_keywords) for item in new_inventory)
 
-                # Suggest food when player health is below 70% (with 5-minute cooldown)
+                # Suggest food when player health is below 70% (5-minute cooldown)
                 if has_food and new_player_health < player_max_health * 0.7 and now - self._last_food_offer_time > 300:
                     self._last_food_offer_time = now
                     changes.append({"text": "询问玩家饿不饿？我这里有点吃的～", "urgent": False})
@@ -834,25 +834,26 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 elif has_torches and new_state["is_underground"] and new_state["light_level"] < 7:
                     pass  # Handled by dark cave detection below
 
-            # === 4. Dark cave torch suggestion ===
+            # === 4. Dark cave torch suggestion (10-minute cooldown) ===
             if (new_state["is_underground"] and new_state["light_level"] < 7
-                    and now - self._last_dark_warn_time > 600):  # 10-minute cooldown
+                    and now - self._last_dark_warn_time > 600):
                 self._last_dark_warn_time = now
                 has_torches = any(any(tk in item.get("item", "") for tk in ["torch", "soul_torch"])
                                   for item in new_state["maid_inventory"])
                 if has_torches:
-                    changes.append({"text": "这里好暗...要不要我帮忙插火把？", "urgent": False})
+                    changes.append({"text": "这里好暗...询问玩家要不要我帮忙插火把？", "urgent": False})
                 else:
-                    changes.append({"text": "这里好暗...有点害怕，可惜没有火把了", "urgent": False})
+                    changes.append({"text": "这里好暗...表达有点害怕，可惜没有火把了", "urgent": False})
 
             # Hostile entities - only notify for NEW ones not previously reported
+            # Close ones are urgent (with cooldown), far ones are context only
             old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}
             new_hostiles = new_state["nearby_hostiles"]
-            # Only report entities that weren't in the previous state
             appeared = [h for h in new_hostiles if h["name"] not in old_hostiles]
             if appeared:
                 close_danger = [h for h in appeared if h["distance"] < 16]
-                if close_danger:
+                if close_danger and now - self._last_hostile_warn_time > 180:
+                    self._last_hostile_warn_time = now
                     names = "、".join(h["name"] for h in close_danger[:3])
                     changes.append({"text": f"危险！附近有{names}！", "urgent": True})
                 elif appeared:
