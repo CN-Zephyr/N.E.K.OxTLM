@@ -22,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -455,7 +456,57 @@ public class MessageHandler {
             data.addProperty("player_max_health", player.getMaxHealth());
             data.addProperty("player_on_fire", player.isOnFire());
             data.addProperty("player_is_drowning", player.getAirSupply() < player.getMaxAirSupply() * 0.4);
+
+            // Player position & distance to maid
+            data.addProperty("player_x", player.getX());
+            data.addProperty("player_y", player.getY());
+            data.addProperty("player_z", player.getZ());
+            data.addProperty("maid_player_distance", maid.distanceTo(player));
+
+            // Player held item
+            ItemStack heldItem = player.getMainHandItem();
+            if (!heldItem.isEmpty()) {
+                data.addProperty("player_held_item", BuiltInRegistries.ITEM.getKey(heldItem.getItem()).toString());
+                data.addProperty("player_held_item_count", heldItem.getCount());
+            } else {
+                data.addProperty("player_held_item", "");
+                data.addProperty("player_held_item_count", 0);
+            }
         }
+
+        // Nearby structures (within 128 blocks)
+        JsonArray structuresArray = new JsonArray();
+        try {
+            ServerLevel serverLevel = (ServerLevel) maid.level();
+            net.minecraft.core.BlockPos maidPos = maid.blockPosition();
+            ChunkPos maidChunk = new ChunkPos(maidPos);
+            int chunkRadius = 4; // ~64 blocks
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            var structureRegistry = serverLevel.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE);
+            for (int cx = maidChunk.x - chunkRadius; cx <= maidChunk.x + chunkRadius; cx++) {
+                for (int cz = maidChunk.z - chunkRadius; cz <= maidChunk.z + chunkRadius; cz++) {
+                    ChunkPos cp = new ChunkPos(cx, cz);
+                    var starts = serverLevel.structureManager().startsForStructure(cp, s -> true);
+                    for (var start : starts) {
+                        net.minecraft.core.BlockPos structPos = start.getBoundingBox().getCenter();
+                        double dist = Math.sqrt(maidPos.distSqr(structPos));
+                        if (dist <= 128) {
+                            // Look up structure name from registry
+                            String structName = structureRegistry.getResourceKey(start.getStructure())
+                                    .map(k -> k.location().toString())
+                                    .orElse("unknown");
+                            if (seen.add(structName)) {
+                                JsonObject structObj = new JsonObject();
+                                structObj.addProperty("name", structName);
+                                structObj.addProperty("distance", Math.round(dist * 10.0) / 10.0);
+                                structuresArray.add(structObj);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        data.add("nearby_structures", structuresArray);
 
         // Maid inventory
         JsonArray inventoryArray = new JsonArray();

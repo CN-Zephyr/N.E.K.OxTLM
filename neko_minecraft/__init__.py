@@ -316,6 +316,12 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._last_dark_warn_time = 0  # Cooldown for dark cave warnings
         self._pending_revenge = None  # {"killer": "...", "cause": "..."}
         self._was_dead = False
+        self._last_notified_held_item = ""  # Debounce for held item notifications
+        self._held_item_candidate = ""  # Candidate held item (needs 2 consecutive checks)
+        self._held_item_candidate_count = 0
+        self._last_maid_player_distance = None  # Last known maid-player distance
+        self._player_nearby = True  # Track player near/far state
+        self._last_distance_warn_time = 0  # Cooldown for distance state change
 
     def _load_config(self):
         try:
@@ -723,15 +729,29 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 if self._bridge and self._bridge.connected and maid_id:
                     changes = await self._detect_awareness_changes()
                     if changes:
-                        change_text = "；".join(c["text"] for c in changes)
-                        has_urgent = any(c.get("urgent") for c in changes)
-                        self.logger.info(f"[Awareness] Pushing: {change_text}")
-                        self.push_message(
-                            source="minecraft",
-                            ai_behavior="respond",
-                            parts=[{"type": "text", "text": change_text}],
-                            priority=6 if has_urgent else 3,
-                        )
+                        # Separate context-only (read) and response-required (respond)
+                        context_items = [c for c in changes if c.get("context_only")]
+                        respond_items = [c for c in changes if not c.get("context_only")]
+
+                        if context_items:
+                            context_text = "；".join(c["text"] for c in context_items)
+                            self.push_message(
+                                source="minecraft",
+                                ai_behavior="read",
+                                parts=[{"type": "text", "text": context_text}],
+                                priority=1,
+                            )
+
+                        if respond_items:
+                            change_text = "；".join(c["text"] for c in respond_items)
+                            has_urgent = any(c.get("urgent") for c in respond_items)
+                            self.logger.info(f"[Awareness] Pushing: {change_text}")
+                            self.push_message(
+                                source="minecraft",
+                                ai_behavior="respond",
+                                parts=[{"type": "text", "text": change_text}],
+                                priority=6 if has_urgent else 3,
+                            )
                 await asyncio.sleep(self._awareness_interval)
             except asyncio.CancelledError:
                 break
@@ -745,6 +765,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
             maid_id = self._resolve_maid_id()
             if not maid_id:
                 return changes
+
+            now = time.time()
 
             # Single request for all awareness data
             result = await self._send_request({
@@ -770,6 +792,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 "light_level": data.get("light_level", 15),
                 "is_underground": data.get("is_underground", False),
                 "maid_inventory": [],
+                "player_held_item": data.get("player_held_item", ""),
+                "player_held_item_count": data.get("player_held_item_count", 0),
+                "nearby_structures": [],
+                "maid_player_distance": data.get("maid_player_distance", None),
             }
 
             # Parse nearby hostiles
@@ -788,11 +814,56 @@ class NekoMinecraftPlugin(NekoPluginBase):
             if inv_items:
                 new_state["maid_inventory"] = [{"item": item.get("item", ""), "count": item.get("count", 1)} for item in inv_items]
 
+            # Parse nearby structures
+            structures = data.get("nearby_structures", [])
+            if structures:
+                new_state["nearby_structures"] = [{"name": s.get("name", ""), "distance": s.get("distance", 999)} for s in structures]
+
             old_state = self._last_awareness_state
             self._last_awareness_state = new_state
 
             if not old_state:
                 return changes
+
+            # === 0. Player held item change (debounced: must be stable for 2 checks = 10s) ===
+            new_held = new_state["player_held_item"]
+            new_held_count = new_state["player_held_item_count"]
+            if new_held == self._held_item_candidate:
+                # Same as last check - if different from last notified, confirm the change
+                if new_held != self._last_notified_held_item:
+                    self._last_notified_held_item = new_held
+                    if new_held:
+                        changes.append({"text": f"玩家手持物品: {new_held}x{new_held_count}", "urgent": False, "context_only": True})
+                    else:
+                        changes.append({"text": "玩家手持物品: 空", "urgent": False, "context_only": True})
+            else:
+                # Different from last check - update candidate but don't notify yet
+                self._held_item_candidate = new_held
+                self._held_item_candidate_count = new_held_count
+
+            # === 0.5 Nearby structures discovery (context only) ===
+            old_structures = {s["name"] for s in old_state.get("nearby_structures", [])}
+            new_structures = new_state["nearby_structures"]
+            discovered = [s for s in new_structures if s["name"] not in old_structures]
+            if discovered:
+                for s in discovered[:3]:
+                    changes.append({"text": f"附近发现结构: {s['name']} (距离{s['distance']}格)", "urgent": False, "context_only": True})
+
+            # === 0.6 Player near/far state change ===
+            # Hysteresis: near < 30 blocks, far > 50 blocks (prevents flickering)
+            new_dist = new_state.get("maid_player_distance")
+            if new_dist is not None:
+                if self._player_nearby and new_dist > 50:
+                    self._player_nearby = False
+                    if now - self._last_distance_warn_time > 60:
+                        self._last_distance_warn_time = now
+                        changes.append({"text": "玩家走好远了...询问要去哪里呀？", "urgent": False})
+                elif not self._player_nearby and new_dist < 30:
+                    self._player_nearby = True
+                    if now - self._last_distance_warn_time > 60:
+                        self._last_distance_warn_time = now
+                        changes.append({"text": "玩家回来了！你很开心", "urgent": False})
+                self._last_maid_player_distance = new_dist
 
             # === 1. Revenge after respawn ===
             if self._was_dead and new_state["maid_health"] > 0:
@@ -809,7 +880,6 @@ class NekoMinecraftPlugin(NekoPluginBase):
             # === 2. Player health & status concern ===
             new_player_health = new_state["player_health"]
             player_max_health = new_state["player_max_health"]
-            now = time.time()
 
             # Low health warning (below 30%) with 5-minute cooldown
             if new_player_health < player_max_health * 0.3 and now - self._last_low_health_warn_time > 300:
