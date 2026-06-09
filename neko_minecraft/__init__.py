@@ -9,6 +9,7 @@ import queue
 import socket
 import sys
 import threading
+import time
 import websockets
 from websockets.exceptions import ConnectionClosed
 
@@ -100,12 +101,11 @@ Task 是你可以切换的工作类型。调用 mc_switch_task 时，task 参数
 
 ## 调用规则
 
-1. 如果已配置指定女仆，maid_id 会自动填充，无需手动获取
-2. 如果未指定女仆，需要先调用 mc_maid_status 获取 maid_id
-3. maid_id 不得编造，只能从配置或 mc_maid_status 返回值中获取
-4. 查询上下文时，应按需选择分类查询，避免一次性查询所有分类
-5. status 和 world 为自动注入分类，通常无需主动查询
-6. 当玩家要求停下/停止当前工作时，必须调用 mc_switch_task(task='待机') 切换到待机模式，不能只回复文字
+1. maid_id 已在配置中指定，所有需要 maid_id 的操作会自动填充，无需手动获取
+2. maid_id 不得编造，只能从配置中获取
+3. 查询上下文时，应按需选择分类查询，避免一次性查询所有分类
+4. status 和 world 为自动注入分类，通常无需主动查询
+5. 当玩家要求停下/停止当前工作时，必须调用 mc_switch_task(task='待机') 切换到待机模式，不能只回复文字
 """
 
 
@@ -305,6 +305,13 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._awareness_task = None
         self._awareness_interval = 60
         self._last_awareness_state = {}
+        self._last_low_health_warn_time = 0  # Cooldown for low health warnings
+        self._last_dark_warn_time = 0  # Cooldown for dark cave warnings
+        self._last_fire_warn_time = 0  # Cooldown for fire warnings
+        self._last_drown_warn_time = 0  # Cooldown for drowning warnings
+        self._last_food_offer_time = 0  # Cooldown for food offering
+        self._pending_revenge = None  # {"killer": "...", "cause": "..."}
+        self._was_dead = False
 
     def _load_config(self):
         try:
@@ -418,12 +425,15 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         self._bridge.start()
         self._poll_task = asyncio.create_task(self._poll_messages())
-        self._awareness_task = asyncio.create_task(self._awareness_loop())
+        self.logger.info(f"[Startup] Bridge started, maid_id={self._assigned_maid_id}")
         return Ok({"status": "ready"})
 
     async def _on_command_loop_start(self):
         self.logger.info("[CommandLoop] Starting message poll on command loop")
         self._poll_task = asyncio.create_task(self._poll_messages())
+        if not self._awareness_task:
+            self._awareness_task = asyncio.create_task(self._awareness_loop())
+            self.logger.info(f"[CommandLoop] Awareness loop started, interval={self._awareness_interval}s")
 
     @lifecycle(id="shutdown")
     async def on_shutdown(self, **_):
@@ -572,7 +582,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self.push_message(
                 source="minecraft",
                 ai_behavior="respond",
-                parts=[{"type": "text", "text": json.dumps(chat_data, ensure_ascii=False)}],
+                parts=[{"type": "text", "text": f"{sender}说了: {message}"}],
                 metadata={"description": f"Minecraft聊天消息 - {sender}: {message}"},
                 priority=7,
             )
@@ -596,7 +606,6 @@ class NekoMinecraftPlugin(NekoPluginBase):
         player_name = event_data.get("player_name", "")
 
         # Only filter by maid_id for events that carry one
-        maid_id_events = {"maid_hurt", "maid_death", "inventory_change"}
         if maid_id and self._assigned_maid_id and maid_id != self._assigned_maid_id:
             return
 
@@ -624,6 +633,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
         elif event_type == "maid_death":
             priority = 10
             cause = event_data.get("cause", "未知原因")
+            killer = event_data.get("killer", "")
+            self._pending_revenge = {"killer": killer, "cause": cause}
+            self._was_dead = True
             parts_text = (
                 f"你倒下了...（死因: {cause}）"
                 f"（你就是「{maid_name}」）"
@@ -677,10 +689,6 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 parts_text = "，".join(parts) + "～"
             else:
                 return  # No actual changes, skip
-        elif event_type == "chat":
-            chat_msg = event_data.get("message", "")
-            priority = 6
-            parts_text = f"{sender}说了: {chat_msg}"
         else:
             priority = 5
             parts_text = f"游戏事件[{event_type}]"
@@ -693,10 +701,12 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
 
     async def _awareness_loop(self):
-        await asyncio.sleep(self._awareness_interval)
+        self.logger.info("[Awareness] Loop started, first check in 5s")
+        await asyncio.sleep(5)  # Initial delay before first check
         while True:
             try:
-                if self._bridge and self._bridge.connected and self._assigned_maid_id:
+                maid_id = self._resolve_maid_id()
+                if self._bridge and self._bridge.connected and maid_id:
                     changes = await self._detect_awareness_changes()
                     if changes:
                         priority = 3
@@ -705,6 +715,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                                 priority = 6
                                 break
                         change_text = "；".join(c["text"] for c in changes)
+                        self.logger.info(f"[Awareness] Pushing: {change_text}")
                         self.push_message(
                             source="minecraft",
                             ai_behavior="respond",
@@ -725,36 +736,47 @@ class NekoMinecraftPlugin(NekoPluginBase):
             if not maid_id:
                 return changes
 
-            world_result = await self._send_request({
+            # Single request for all awareness data
+            result = await self._send_request({
                 "type": "get_game_context",
-                "data": {"maid_id": maid_id, "category": "world"},
-            }, timeout=10)
-            if world_result.get("type") == "error":
+                "data": {"maid_id": maid_id, "category": "awareness"},
+            }, timeout=15)
+            if result.get("type") == "error":
                 return changes
-            world_data = world_result.get("data", {})
-
-            nearby_result = await self._send_request({
-                "type": "get_game_context",
-                "data": {"maid_id": maid_id, "category": "nearby_entities"},
-            }, timeout=10)
+            data = result.get("data", {})
+            if data.get("error"):
+                return changes
 
             new_state = {
-                "is_raining": world_data.get("is_raining", False),
-                "is_thundering": world_data.get("is_thundering", False),
-                "time_of_day": world_data.get("time_of_day", 0),
+                "is_raining": data.get("is_raining", False),
+                "is_thundering": data.get("is_thundering", False),
+                "time_of_day": data.get("time_of_day", 0),
                 "nearby_hostiles": [],
+                "maid_health": data.get("maid_health", 0),
+                "player_health": data.get("player_health", 20),
+                "player_max_health": data.get("player_max_health", 20),
+                "player_on_fire": data.get("player_on_fire", False),
+                "player_is_drowning": data.get("player_is_drowning", False),
+                "light_level": data.get("light_level", 15),
+                "is_underground": data.get("is_underground", False),
+                "maid_inventory": [],
             }
 
-            if nearby_result.get("type") != "error":
-                entities = nearby_result.get("data", {}).get("entities", [])
-                hostile_types = ["creeper", "zombie", "skeleton", "spider", "enderman", "witch", "phantom", "slime", "wither", "blaze", "ghast"]
-                for entity in entities:
-                    entity_type = entity.get("type", "").lower()
-                    if any(h in entity_type for h in hostile_types):
-                        new_state["nearby_hostiles"].append({
-                            "name": entity.get("name", ""),
-                            "distance": entity.get("distance", 999),
-                        })
+            # Parse nearby hostiles
+            entities = data.get("entities", [])
+            hostile_types = ["creeper", "zombie", "skeleton", "spider", "enderman", "witch", "phantom", "slime", "wither", "blaze", "ghast"]
+            for entity in entities:
+                entity_type = entity.get("type", "").lower()
+                if any(h in entity_type for h in hostile_types):
+                    new_state["nearby_hostiles"].append({
+                        "name": entity.get("name", ""),
+                        "distance": entity.get("distance", 999),
+                    })
+
+            # Parse inventory
+            inv_items = data.get("inventory", [])
+            if inv_items:
+                new_state["maid_inventory"] = [{"item": item.get("item", ""), "count": item.get("count", 1)} for item in inv_items]
 
             old_state = self._last_awareness_state
             self._last_awareness_state = new_state
@@ -762,26 +784,66 @@ class NekoMinecraftPlugin(NekoPluginBase):
             if not old_state:
                 return changes
 
-            # Weather changes
-            if new_state["is_raining"] != old_state.get("is_raining", False):
-                if new_state["is_raining"]:
-                    if new_state["is_thundering"]:
-                        changes.append({"text": "打雷了！好可怕...", "urgent": True})
+            # === 1. Revenge after respawn ===
+            if self._was_dead and new_state["maid_health"] > 0:
+                self._was_dead = False
+                if self._pending_revenge:
+                    revenge = self._pending_revenge
+                    self._pending_revenge = None
+                    killer = revenge.get("killer", "")
+                    if killer:
+                        changes.append({"text": f"我复活了！刚才那只{killer}呢？我要打回去！", "urgent": False})
                     else:
-                        changes.append({"text": "下雨了诶～", "urgent": False})
-                else:
-                    changes.append({"text": "雨停了！", "urgent": False})
+                        changes.append({"text": "我复活了！下次不会再倒下了！", "urgent": False})
 
-            # Day/night changes
-            old_time = old_state.get("time_of_day", 0)
-            new_time = new_state["time_of_day"]
-            old_is_night = old_time >= 12542 or old_time < 23460
-            new_is_night = new_time >= 12542 or new_time < 23460
-            if old_is_night != new_is_night:
-                if new_is_night:
-                    changes.append({"text": "天黑了...有点害怕，要不要回家？", "urgent": True})
+            # === 2. Player health & status concern ===
+            new_player_health = new_state["player_health"]
+            player_max_health = new_state["player_max_health"]
+            now = time.time()
+
+            # Low health warning (below 30%) with 5-minute cooldown
+            if new_player_health < player_max_health * 0.3 and now - self._last_low_health_warn_time > 300:
+                self._last_low_health_warn_time = now
+                changes.append({"text": "玩家血量低！提醒小心！", "urgent": True})
+
+            # On fire (with 2-minute cooldown)
+            if new_state["player_on_fire"] and now - self._last_fire_warn_time > 120:
+                self._last_fire_warn_time = now
+                changes.append({"text": "玩家着火了！快提醒灭火！", "urgent": True})
+
+            # Drowning (with 2-minute cooldown)
+            if new_state["player_is_drowning"] and now - self._last_drown_warn_time > 120:
+                self._last_drown_warn_time = now
+                changes.append({"text": "玩家在溺水！提醒快上岸！", "urgent": True})
+
+            # === 3. Proactive inventory sharing ===
+            new_inventory = new_state["maid_inventory"]
+            if new_inventory:
+                food_keywords = ["bread", "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
+                                 "cooked_cod", "cooked_salmon", "baked_potato", "golden_carrot", "apple",
+                                 "melon_slice", "cookie", "cake", "pumpkin_pie"]
+                torch_keywords = ["torch", "soul_torch"]
+                has_food = any(any(fk in item.get("item", "") for fk in food_keywords) for item in new_inventory)
+                has_torches = any(any(tk in item.get("item", "") for tk in torch_keywords) for item in new_inventory)
+
+                # Suggest food when player health is below 70% (with 5-minute cooldown)
+                if has_food and new_player_health < player_max_health * 0.7 and now - self._last_food_offer_time > 300:
+                    self._last_food_offer_time = now
+                    changes.append({"text": "询问玩家饿不饿？我这里有点吃的～", "urgent": False})
+                # Suggest torches when underground and dark (covered by dark cave logic below)
+                elif has_torches and new_state["is_underground"] and new_state["light_level"] < 7:
+                    pass  # Handled by dark cave detection below
+
+            # === 4. Dark cave torch suggestion ===
+            if (new_state["is_underground"] and new_state["light_level"] < 7
+                    and now - self._last_dark_warn_time > 600):  # 10-minute cooldown
+                self._last_dark_warn_time = now
+                has_torches = any(any(tk in item.get("item", "") for tk in ["torch", "soul_torch"])
+                                  for item in new_state["maid_inventory"])
+                if has_torches:
+                    changes.append({"text": "这里好暗...要不要我帮忙插火把？", "urgent": False})
                 else:
-                    changes.append({"text": "天亮了！新的一天～", "urgent": False})
+                    changes.append({"text": "这里好暗...有点害怕，可惜没有火把了", "urgent": False})
 
             # Hostile entities - only notify for NEW ones not previously reported
             old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}
@@ -792,10 +854,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 close_danger = [h for h in appeared if h["distance"] < 16]
                 if close_danger:
                     names = "、".join(h["name"] for h in close_danger[:3])
-                    changes.append({"text": f"危险！附近有{name}！", "urgent": True})
+                    changes.append({"text": f"危险！附近有{names}！", "urgent": True})
                 elif appeared:
                     names = "、".join(h["name"] for h in appeared[:3])
-                    changes.append({"text": f"远处好像有{name}...", "urgent": False})
+                    changes.append({"text": f"远处好像有{names}...", "urgent": False})
 
         except Exception as e:
             self.logger.error(f"Awareness detection error: {e}")
@@ -953,11 +1015,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         name="mc_maid_status",
         description=(
             "查询你在Minecraft世界中女仆的当前状态。"
-            "你是存在于Minecraft世界中的女仆，此工具返回所有女仆的信息，包括你自己。"
-            "返回每个女仆的id(UUID格式)、名字、血量、位置、是否坐着、是否跟随、主人名字、手持物品等。"
-            "此工具对应TLM AI系统的status Context分类，返回的女仆状态信息与TLM status Context字段对应"
-            "（Self health ↔ health/max_health，Is following ↔ is_following，Schedule ↔ schedule等）。"
-            "当你被玩家互动、受伤、或需要了解自身状态时，应调用此工具。"
+            "返回所有女仆的信息，包括id(UUID格式)、名字、血量、位置、是否坐着、是否跟随、主人名字、手持物品等。"
+            "当你需要了解自身或其他女仆的状态时，应调用此工具。"
         ),
         parameters={
             "type": "object",

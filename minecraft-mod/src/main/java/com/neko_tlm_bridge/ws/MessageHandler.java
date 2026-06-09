@@ -176,6 +176,7 @@ public class MessageHandler {
                 case "effects" -> contextData = collectEffectsContext(maid);
                 case "position" -> contextData = collectPositionContext(maid);
                 case "nearby_entities" -> contextData = collectNearbyEntitiesContext(maid);
+                case "awareness" -> contextData = collectAwarenessContext(maid);
                 default -> contextData = collectWorldContext();
             }
 
@@ -309,6 +310,21 @@ public class MessageHandler {
             pos.addProperty("z", player.getZ());
             data.add("position", pos);
             data.addProperty("dimension", player.level().dimension().location().toString());
+            // Player status flags
+            data.addProperty("on_fire", player.isOnFire());
+            data.addProperty("is_drowning", player.getAirSupply() < player.getMaxAirSupply() * 0.4);
+            data.addProperty("air_supply", player.getAirSupply());
+            data.addProperty("max_air", player.getMaxAirSupply());
+            // Active effects
+            JsonArray effectsArray = new JsonArray();
+            for (var effect : player.getActiveEffects()) {
+                JsonObject effectObj = new JsonObject();
+                effectObj.addProperty("effect", effect.getEffect().value().getDescriptionId());
+                effectObj.addProperty("amplifier", effect.getAmplifier());
+                effectObj.addProperty("duration", effect.getDuration());
+                effectsArray.add(effectObj);
+            }
+            data.add("effects", effectsArray);
         } else {
             data.addProperty("error", "Owner not online or not found");
         }
@@ -346,6 +362,11 @@ public class MessageHandler {
         maidPos.addProperty("z", maid.getZ());
         data.add("maid_position", maidPos);
         data.addProperty("maid_dimension", maid.level().dimension().location().toString());
+        // Light level at maid's position
+        data.addProperty("light_level", maid.level().getMaxLocalRawBrightness(maid.blockPosition()));
+        // Check if underground (no sky light, below surface)
+        data.addProperty("is_underground", maid.getY() < maid.level().getSeaLevel() - 1
+                && !maid.level().canSeeSky(maid.blockPosition()));
 
         LivingEntity owner = maid.getOwner();
         if (owner != null) {
@@ -395,6 +416,81 @@ public class MessageHandler {
         }
         data.add("entities", entitiesArray);
         data.addProperty("total_nearby", count);
+        return data;
+    }
+
+    /**
+     * Combined context for awareness loop - returns all data needed in one request
+     * to avoid multiple round-trips.
+     */
+    private JsonObject collectAwarenessContext(EntityMaid maid) {
+        JsonObject data = new JsonObject();
+        if (maid == null) {
+            data.addProperty("error", "No maid found");
+            return data;
+        }
+
+        // Maid status
+        data.addProperty("maid_health", maid.getHealth());
+        data.addProperty("maid_max_health", maid.getMaxHealth());
+
+        // World context
+        ServerLevel overworld = minecraftServer.getLevel(Level.OVERWORLD);
+        if (overworld != null) {
+            long dayTime = overworld.getDayTime();
+            data.addProperty("is_raining", overworld.isRaining());
+            data.addProperty("is_thundering", overworld.isThundering());
+            data.addProperty("time_of_day", dayTime % 24000);
+        }
+
+        // Position & light
+        data.addProperty("light_level", maid.level().getMaxLocalRawBrightness(maid.blockPosition()));
+        data.addProperty("is_underground", maid.getY() < maid.level().getSeaLevel() - 1
+                && !maid.level().canSeeSky(maid.blockPosition()));
+
+        // Owner (player) status
+        LivingEntity owner = maid.getOwner();
+        if (owner instanceof ServerPlayer player) {
+            data.addProperty("player_health", player.getHealth());
+            data.addProperty("player_max_health", player.getMaxHealth());
+            data.addProperty("player_on_fire", player.isOnFire());
+            data.addProperty("player_is_drowning", player.getAirSupply() < player.getMaxAirSupply() * 0.4);
+        }
+
+        // Maid inventory
+        JsonArray inventoryArray = new JsonArray();
+        ItemStackHandler maidInv = maid.getMaidInv();
+        for (int i = 0; i < maidInv.getSlots(); i++) {
+            ItemStack stack = maidInv.getStackInSlot(i);
+            if (!stack.isEmpty()) {
+                JsonObject invItem = new JsonObject();
+                invItem.addProperty("item", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+                invItem.addProperty("count", stack.getCount());
+                inventoryArray.add(invItem);
+            }
+        }
+        data.add("inventory", inventoryArray);
+
+        // Nearby entities
+        double radius = 32.0;
+        AABB searchBox = new AABB(
+                maid.getX() - radius, maid.getY() - radius, maid.getZ() - radius,
+                maid.getX() + radius, maid.getY() + radius, maid.getZ() + radius);
+        List<LivingEntity> nearby = maid.level().getEntitiesOfClass(LivingEntity.class, searchBox);
+        JsonArray entitiesArray = new JsonArray();
+        int count = 0;
+        for (LivingEntity entity : nearby) {
+            if (entity == maid) continue;
+            if (count >= 20) break;
+            JsonObject entityObj = new JsonObject();
+            entityObj.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
+            entityObj.addProperty("name", entity.getName().getString());
+            entityObj.addProperty("distance", maid.distanceTo(entity));
+            entitiesArray.add(entityObj);
+            count++;
+        }
+        data.add("entities", entitiesArray);
+
         return data;
     }
 

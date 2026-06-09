@@ -202,7 +202,7 @@ public class GameEventHandler {
     }
 
     @SubscribeEvent
-    public static void onAdvancement(net.neoforged.neoforge.event.entity.player.AdvancementEvent event) {
+    public static void onAdvancement(net.neoforged.neoforge.event.entity.player.AdvancementEvent.AdvancementEarnEvent event) {
         if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
         net.minecraft.advancements.AdvancementHolder holder = event.getAdvancement();
         net.minecraft.advancements.Advancement advancement = holder.value();
