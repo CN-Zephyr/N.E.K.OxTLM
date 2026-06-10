@@ -1,10 +1,154 @@
-"""游戏事件格式化 — 将游戏事件数据转换为角色化文本，返回文本、优先级和副作用"""
+"""游戏事件格式化 — 将游戏事件数据转换为角色化文本，返回文本、优先级和副作用
+
+棋局事件返回特殊的 side_effects 结构：
+  {"chess_event": True, "event_type": "chess_game_start"|"chess_mid_game"|"chess_game_end", ...}
+由 __init__.py 中的 _handle_event 处理图片渲染和推送。
+"""
+
+# 棋类名称映射
+_GAME_NAMES = {
+    "gomoku": "五子棋",
+    "wchess": "国际象棋",
+    "cchess": "中国象棋",
+}
+
+# 中国象棋棋子名称映射
+_CCHESS_PIECE_NAMES = {
+    "r": "车", "n": "马", "b": "象", "a": "士", "k": "将", "c": "炮", "p": "卒",
+    "R": "车", "N": "马", "B": "相", "A": "仕", "K": "帅", "C": "炮", "P": "兵",
+}
+
+# 国际象棋棋子名称映射
+_WCHESS_PIECE_NAMES = {
+    "r": "车", "n": "马", "b": "象", "q": "后", "k": "王", "p": "兵",
+    "R": "车", "N": "马", "B": "象", "Q": "后", "K": "王", "P": "兵",
+}
+
+
+def _describe_board(event_data):
+    """根据棋盘数据生成简短的局面描述"""
+    game_type = event_data.get("game_type", "")
+
+    if game_type == "gomoku":
+        board = event_data.get("board", "")
+        if not board or len(board) < 225:
+            return ""
+        black = board.count("1")
+        white = board.count("2")
+        # 检测是否有即将连五的威胁
+        threats = _gomoku_threats(board)
+        if threats:
+            return f"黑子{black}个白子{white}个，{threats}"
+        return f"黑子{black}个白子{white}个"
+
+    elif game_type == "cchess":
+        fen = event_data.get("fen", "")
+        if not fen:
+            return ""
+        return _describe_cchess_fen(fen)
+
+    elif game_type == "wchess":
+        fen = event_data.get("fen", "")
+        if not fen:
+            return ""
+        return _describe_wchess_fen(fen)
+
+    return ""
+
+
+def _gomoku_threats(board):
+    """检测五子棋中是否有连四/活三等威胁"""
+    # 简化检测：检查是否有3个或4个同色连续棋子
+    lines = []
+    grid = []
+    for x in range(15):
+        row = []
+        for y in range(15):
+            row.append(board[x * 15 + y] if x * 15 + y < len(board) else "0")
+        grid.append(row)
+
+    # 检查所有方向（横、竖、斜）的连续同色
+    found = []
+    for color in ["1", "2"]:
+        color_name = "黑" if color == "1" else "白"
+        max_run = 0
+        for x in range(15):
+            for y in range(15):
+                if grid[x][y] != color:
+                    continue
+                # 四个方向
+                for dx, dy in [(0, 1), (1, 0), (1, 1), (1, -1)]:
+                    run = 1
+                    for step in range(1, 5):
+                        nx, ny = x + dx * step, y + dy * step
+                        if 0 <= nx < 15 and 0 <= ny < 15 and grid[nx][ny] == color:
+                            run += 1
+                        else:
+                            break
+                    if run > max_run:
+                        max_run = run
+        if max_run >= 4:
+            found.append(f"{color_name}方快连成五了")
+        elif max_run >= 3:
+            found.append(f"{color_name}方有三连")
+
+    return "，".join(found) if found else ""
+
+
+def _describe_cchess_fen(fen):
+    """解析中国象棋FEN，统计双方剩余棋子"""
+    placement = fen.split()[0] if " " in fen else fen
+    red_pieces = {}
+    black_pieces = {}
+    for ch in placement:
+        if ch == "/" or ch.isdigit():
+            continue
+        name = _CCHESS_PIECE_NAMES.get(ch, ch)
+        if ch.isupper():
+            red_pieces[name] = red_pieces.get(name, 0) + 1
+        else:
+            black_pieces[name] = black_pieces.get(name, 0) + 1
+
+    parts = []
+    if red_pieces:
+        items = "、".join(f"{k}{v}" if v > 1 else k for k, v in red_pieces.items())
+        parts.append(f"红方有{items}")
+    if black_pieces:
+        items = "、".join(f"{k}{v}" if v > 1 else k for k, v in black_pieces.items())
+        parts.append(f"黑方有{items}")
+    return "，".join(parts) if parts else ""
+
+
+def _describe_wchess_fen(fen):
+    """解析国际象棋FEN，统计双方剩余棋子"""
+    placement = fen.split()[0] if " " in fen else fen
+    white_pieces = {}
+    black_pieces = {}
+    for ch in placement:
+        if ch == "/" or ch.isdigit():
+            continue
+        name = _WCHESS_PIECE_NAMES.get(ch.lower(), ch)
+        if ch.isupper():
+            white_pieces[name] = white_pieces.get(name, 0) + 1
+        else:
+            black_pieces[name] = black_pieces.get(name, 0) + 1
+
+    parts = []
+    if white_pieces:
+        items = "、".join(f"{k}{v}" if v > 1 else k for k, v in white_pieces.items())
+        parts.append(f"白方有{items}")
+    if black_pieces:
+        items = "、".join(f"{k}{v}" if v > 1 else k for k, v in black_pieces.items())
+        parts.append(f"黑方有{items}")
+    return "，".join(parts) if parts else ""
+
 
 def format_event(event_data, assigned_maid_id):
     """格式化事件数据，返回 (parts_text, priority, side_effects) 元组。
 
     side_effects 是一个字典，包含需要在调用方执行的副作用，如：
     {"pending_revenge": {...}, "was_dead": True}
+    棋局事件使用 {"chess_event": True, ...} 标记，由调用方特殊处理。
     """
     event_type = event_data.get("event_type", "")
     maid_id = event_data.get("maid_id", "")
@@ -94,6 +238,50 @@ def format_event(event_data, assigned_maid_id):
             parts_text = "，".join(parts) + "～"
         else:
             return None, None, None  # No actual changes, skip
+
+    # ── 棋局事件 ──
+    elif event_type == "chess_game_start":
+        game_type = event_data.get("game_type", "unknown")
+        game_name = _GAME_NAMES.get(game_type, game_type)
+        opponent = event_data.get("opponent", "伙伴")
+        priority = 9
+        parts_text = f"正在和{opponent}下{game_name}呢～"
+        side_effects["chess_event"] = True
+        side_effects["chess_event_type"] = "chess_game_start"
+        side_effects["ai_behavior"] = "respond"
+
+    elif event_type == "chess_mid_game":
+        game_type = event_data.get("game_type", "unknown")
+        game_name = _GAME_NAMES.get(game_type, game_type)
+        move_count = event_data.get("move_count", 0)
+        is_maid_turn = event_data.get("is_maid_turn", False)
+        priority = 4
+        turn_hint = "轮到我了..." if is_maid_turn else "轮到对方走了"
+        context = _describe_board(event_data)
+        parts_text = f"下{game_name}中...第{move_count}步，{turn_hint}。{context}"
+        side_effects["chess_event"] = True
+        side_effects["chess_event_type"] = "chess_mid_game"
+        side_effects["ai_behavior"] = "respond"
+
+    elif event_type == "chess_game_end":
+        game_type = event_data.get("game_type", "unknown")
+        game_name = _GAME_NAMES.get(game_type, game_type)
+        result = event_data.get("result", "unknown")
+        opponent = event_data.get("opponent", "伙伴")
+        move_count = event_data.get("move_count", 0)
+        priority = 9
+        if result == "win":
+            parts_text = f"下{game_name}赢了！嘿嘿，我可是很厉害的～（和{opponent}下了{move_count}步）"
+        elif result == "lose":
+            parts_text = f"呜...下{game_name}输了...再来一局嘛！（和{opponent}下了{move_count}步）"
+        elif result == "draw":
+            parts_text = f"下{game_name}平局了...势均力敌呢！（和{opponent}下了{move_count}步）"
+        else:
+            parts_text = f"下{game_name}结束了...（和{opponent}下了{move_count}步）"
+        side_effects["chess_event"] = True
+        side_effects["chess_event_type"] = "chess_game_end"
+        side_effects["ai_behavior"] = "respond"
+
     else:
         priority = 5
         parts_text = f"游戏事件[{event_type}]"

@@ -35,5 +35,10 @@ public final class Protocol {
     public static final String EVENT_ADVANCEMENT = "advancement";
     public static final String EVENT_BIOME_CHANGE = "biome_change";
 
+    // Chess game events
+    public static final String EVENT_CHESS_GAME_START = "chess_game_start";
+    public static final String EVENT_CHESS_MID_GAME = "chess_mid_game";
+    public static final String EVENT_CHESS_GAME_END = "chess_game_end";
+
     private Protocol() {}
 }

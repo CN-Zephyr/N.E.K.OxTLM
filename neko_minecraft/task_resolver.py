@@ -25,9 +25,26 @@ _TASK_SYNONYMS = {
 def resolve_task_name(task, available_tasks=None):
     if ":" in task:
         return task
-    if not available_tasks:
-        return task
-    return fuzzy_match_task(task, available_tasks)
+    if available_tasks:
+        return fuzzy_match_task(task, available_tasks)
+    # No available_tasks — try synonym lookup to get short_id
+    short_id = _synonym_lookup(task)
+    if short_id:
+        return f"touhou_little_maid:{short_id}"
+    return task
+
+
+def _synonym_lookup(query):
+    """通过同义词表查找短ID，无匹配返回 None"""
+    query_str = query.strip()
+    query_lower = query_str.lower()
+    for short_id, synonyms in _TASK_SYNONYMS.items():
+        if query_lower == short_id.lower():
+            return short_id
+        for syn in synonyms:
+            if query_str == syn or query_lower == syn.lower():
+                return short_id
+    return None
 
 
 def fuzzy_match_task(query, available_tasks):

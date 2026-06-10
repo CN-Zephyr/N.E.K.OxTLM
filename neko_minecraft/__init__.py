@@ -15,6 +15,7 @@ from . import config as _config
 from . import events as _events
 from .awareness import AwarenessManager
 from . import tools as _tools
+
 from .tool_defs import (
     MC_MAID_STATUS, MC_SWITCH_FOLLOW, MC_SWITCH_SIT,
     MC_SWITCH_TASK, MC_SWITCH_SCHEDULE, MC_EQUIP_ITEM,
@@ -186,6 +187,25 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 self._awareness._pending_revenge = side_effects["pending_revenge"]
             if "was_dead" in side_effects:
                 self._awareness._was_dead = side_effects["was_dead"]
+
+        # 棋局事件特殊处理
+        if side_effects.get("chess_event"):
+            ai_behavior = side_effects.get("ai_behavior", "respond")
+            chess_event_type = side_effects.get("chess_event_type", "")
+
+            self.logger.info(
+                f"[Chess] Event: {chess_event_type}, "
+                f"game={event_data.get('game_type', '?')}, "
+                f"priority={priority}, ai_behavior={ai_behavior}, "
+                f"text={parts_text[:80]}"
+            )
+
+            self.push_message(
+                source="minecraft", ai_behavior=ai_behavior,
+                parts=[{"type": "text", "text": parts_text}], priority=priority,
+            )
+            return
+
         self.push_message(
             source="minecraft", ai_behavior="respond",
             parts=[{"type": "text", "text": parts_text}], priority=priority,

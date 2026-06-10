@@ -80,6 +80,8 @@ async def do_switch_task(plugin, *, task=""):
 
     maid = plugin._maid_status_cache.get(maid_id, {})
     available = maid.get("available_tasks", [])
+    plugin.logger.info(f"[switch_task] Cache hit={bool(maid)}, available_tasks count={len(available)}")
+
     if not available:
         try:
             status_result = await plugin._send_request({"type": "get_maid_status"}, timeout=5)
@@ -88,6 +90,9 @@ async def do_switch_task(plugin, *, task=""):
                     plugin._maid_status_cache[m.get("id", "")] = m
                 maid = plugin._maid_status_cache.get(maid_id, {})
                 available = maid.get("available_tasks", [])
+                plugin.logger.info(f"[switch_task] get_maid_status: found {len(maid.get('available_tasks', []))} tasks for maid {maid_id}")
+            else:
+                plugin.logger.warning(f"[switch_task] get_maid_status failed: {status_result.get('data', {})}")
         except Exception as e:
             plugin.logger.warning(f"[Entry] switch_task: failed to fetch maid status: {e}")
 
@@ -99,11 +104,14 @@ async def do_switch_task(plugin, *, task=""):
             }, timeout=5)
             if ctx_result.get("type") != "error":
                 available = ctx_result.get("data", {}).get("available_tasks", [])
+                plugin.logger.info(f"[switch_task] get_game_context: found {len(available)} tasks")
+            else:
+                plugin.logger.warning(f"[switch_task] get_game_context failed: {ctx_result.get('data', {})}")
         except Exception as e:
             plugin.logger.warning(f"[Entry] switch_task: failed to query game_context: {e}")
 
     resolved_task = task_resolver.resolve_task_name(task, available)
-    plugin.logger.info(f"[Entry] switch_task: '{task}' resolved to '{resolved_task}'")
+    plugin.logger.info(f"[Entry] switch_task: '{task}' resolved to '{resolved_task}' (available={len(available)} tasks)")
 
     if resolved_task is None:
         lines = []
