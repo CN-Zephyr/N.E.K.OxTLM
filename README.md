@@ -182,9 +182,11 @@ Python 侧插件每5秒轮询一次游戏状态（通过 `awareness` category �
 
 ## 项目结构
 
+### Minecraft Mod 端（Java/NeoForge）
+
 ```
 src/main/java/com/neko_tlm_bridge/
-├── NekoTlmBridge.java          # 模组主类，生命周期管理
+├── NekoTlmBridge.java          # 模组主类，生命周期管理与 handler 初始化
 ├── client/
 │   └── NekoConfigScreen.java   # 配置界面
 ├── config/
@@ -194,17 +196,49 @@ src/main/java/com/neko_tlm_bridge/
 ├── tlm/
 │   ├── LittleMaidCompat.java       # 车万女仆 API 扩展注册
 │   ├── NekoBridgeTool.java         # AI 工具：消息转发到 N.E.K.O
-│   ├── NekoBridgeContext.java      # AI 上下文：桥接连接状态
 │   ├── NekoExtraMaidBrain.java     # 女仆额外行为注册
 │   ├── NekoAttackTargetBehavior.java  # 自定义攻击行为
 │   ├── NekoAttackTargetStore.java     # 攻击目标存储与管理
 │   └── NekoWebSocketServerHolder.java # WebSocket 服务器引用持有
 └── ws/
     ├── NekoWebSocketServer.java     # WebSocket 服务器实现
-    ├── MessageHandler.java          # 消息处理与游戏操作
     ├── NekoCommand.java             # 游戏内指令注册
     ├── PendingCommandManager.java   # 待确认指令管理
-    └── Protocol.java                # 协议常量定义
+    ├── Protocol.java                # 协议常量定义
+    └── handler/                     # 消息处理器（模块化拆分）
+        ├── MessageHandlerInterface.java  # Handler 公共接口
+        ├── MessageRouter.java            # 消息路由分发 + 主线程队列
+        ├── MaidStatusHandler.java        # 女仆状态查询
+        ├── CommandMaidHandler.java       # 女仆控制命令（跟随/坐下/任务/日程/装备）
+        ├── GameContextHandler.java       # 游戏上下文查询（7种 category + awareness）
+        ├── ChatHandler.java             # 聊天消息发送
+        ├── CommandExecutionHandler.java  # 服务器命令执行（需玩家确认）
+        ├── AttackTargetHandler.java     # 攻击目标管理
+        ├── SkillHandler.java            # 技能查询
+        ├── ConfigHandler.java           # 配置查询与监控女仆设置
+        └── MaidHelper.java              # 女仆查找共享工具方法
+```
+
+### N.E.K.O 插件端（Python）
+
+```
+neko_minecraft/
+├── __init__.py          # 插件主类：生命周期、消息分发、@llm_tool 声明、UI
+├── instructions.py      # AI 指令模板（注入到 LLM 上下文的系统提示词）
+├── task_resolver.py     # 任务名解析与模糊匹配（中文同义词 → TLM 任务 ID）
+├── bridge.py            # WebSocket 桥接层（连接、重连、心跳、收发队列）
+├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
+├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级）
+├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
+├── tools.py             # LLM 工具业务逻辑（10个 do_* 函数）
+├── tool_defs.py         # LLM 工具元数据常量（name/description/parameters）
+├── config.json          # 默认配置
+├── plugin.toml          # 插件描述与运行时配置
+├── ui/
+│   └── panel.tsx        # 仪表盘 UI 面板
+└── i18n/
+    ├── zh-CN.json       # 中文翻译
+    └── en.json          # 英文翻译
 ```
 
 ## 构建

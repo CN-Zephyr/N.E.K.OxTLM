@@ -3,6 +3,7 @@ package com.neko_tlm_bridge.ws;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.neko_tlm_bridge.config.ModConfig;
+import com.neko_tlm_bridge.ws.handler.MessageRouter;
 import org.java_websocket.server.WebSocketServer;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -19,12 +20,13 @@ public class NekoWebSocketServer extends WebSocketServer {
     private static final Logger LOGGER = LoggerFactory.getLogger("NekoTlmBridge");
     private static final Gson GSON = new Gson();
     private final Set<WebSocket> clients = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final MessageHandler messageHandler;
-    private final PendingCommandManager pendingCommandManager = new PendingCommandManager();
+    private final MessageRouter messageRouter;
+    private final PendingCommandManager pendingCommandManager;
 
-    public NekoWebSocketServer(MessageHandler messageHandler) {
+    public NekoWebSocketServer(MessageRouter messageRouter, PendingCommandManager pendingCommandManager) {
         super(new InetSocketAddress("127.0.0.1", ModConfig.WEBSOCKET_PORT.get()));
-        this.messageHandler = messageHandler;
+        this.messageRouter = messageRouter;
+        this.pendingCommandManager = pendingCommandManager;
         this.setReuseAddr(true);
     }
 
@@ -53,18 +55,10 @@ public class NekoWebSocketServer extends WebSocketServer {
             String type = json.get("type").getAsString();
             String requestId = json.has("request_id") ? json.get("request_id").getAsString() : null;
 
-            switch (type) {
-                case Protocol.TYPE_GET_MAID_STATUS -> messageHandler.handleGetMaidStatus(conn, requestId);
-                case Protocol.TYPE_COMMAND_MAID -> messageHandler.handleCommandMaid(conn, requestId, json);
-                case Protocol.TYPE_SEND_CHAT -> messageHandler.handleSendChat(conn, requestId, json);
-                case Protocol.TYPE_GET_GAME_CONTEXT -> messageHandler.handleGetGameContext(conn, requestId, json);
-                case Protocol.TYPE_USE_SKILL -> messageHandler.handleUseSkill(conn, requestId, json);
-                case Protocol.TYPE_EXECUTE_COMMAND -> messageHandler.handleExecuteCommand(conn, requestId, json);
-                case Protocol.TYPE_ATTACK_TARGET -> messageHandler.handleAttackTarget(conn, requestId, json);
-                case Protocol.TYPE_GET_CONFIG -> messageHandler.handleGetConfig(conn, requestId);
-                case Protocol.TYPE_SET_MONITORED_MAID -> messageHandler.handleSetMonitoredMaid(conn, requestId, json);
-                case Protocol.TYPE_PING -> sendToClient(conn, GSON.toJson(createPong(requestId)));
-                default -> sendError(conn, requestId, "Unknown message type: " + type);
+            if (Protocol.TYPE_PING.equals(type)) {
+                sendToClient(conn, GSON.toJson(createPong(requestId)));
+            } else {
+                messageRouter.routeMessage(type, json, conn);
             }
         } catch (Exception e) {
             LOGGER.error("Error processing message: {}", e.getMessage());

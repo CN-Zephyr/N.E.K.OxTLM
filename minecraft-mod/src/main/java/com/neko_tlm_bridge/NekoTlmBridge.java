@@ -4,9 +4,11 @@ import com.neko_tlm_bridge.config.ModConfig;
 import com.neko_tlm_bridge.event.GameEventHandler;
 import com.neko_tlm_bridge.tlm.NekoAttackTargetStore;
 import com.neko_tlm_bridge.tlm.NekoWebSocketServerHolder;
-import com.neko_tlm_bridge.ws.MessageHandler;
 import com.neko_tlm_bridge.ws.NekoCommand;
 import com.neko_tlm_bridge.ws.NekoWebSocketServer;
+import com.neko_tlm_bridge.ws.PendingCommandManager;
+import com.neko_tlm_bridge.ws.Protocol;
+import com.neko_tlm_bridge.ws.handler.*;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -28,7 +30,7 @@ public class NekoTlmBridge {
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     private static NekoWebSocketServer webSocketServer;
-    private static MessageHandler messageHandler;
+    private static MessageRouter messageRouter;
 
     public NekoTlmBridge(IEventBus modEventBus, ModContainer modContainer) {
         modContainer.registerConfig(Type.COMMON, ModConfig.SPEC);
@@ -50,9 +52,34 @@ public class NekoTlmBridge {
             return;
         }
 
-        messageHandler = new MessageHandler(null);
-        webSocketServer = new NekoWebSocketServer(messageHandler);
-        messageHandler.setMinecraftServer(event.getServer());
+        net.minecraft.server.MinecraftServer server = event.getServer();
+        PendingCommandManager pendingCommandManager = new PendingCommandManager();
+
+        // Create handlers
+        MaidStatusHandler maidStatusHandler = new MaidStatusHandler(server);
+        CommandMaidHandler commandMaidHandler = new CommandMaidHandler(server);
+        GameContextHandler gameContextHandler = new GameContextHandler(server);
+        ChatHandler chatHandler = new ChatHandler(server);
+        CommandExecutionHandler commandExecutionHandler = new CommandExecutionHandler(server, pendingCommandManager);
+        AttackTargetHandler attackTargetHandler = new AttackTargetHandler(server);
+        SkillHandler skillHandler = new SkillHandler(server);
+        ConfigHandler configHandler = new ConfigHandler(server);
+
+        // Create router and register handlers
+        java.util.Map<String, MessageHandlerInterface> handlers = new java.util.LinkedHashMap<>();
+        handlers.put(Protocol.TYPE_GET_MAID_STATUS, maidStatusHandler);
+        handlers.put(Protocol.TYPE_COMMAND_MAID, commandMaidHandler);
+        handlers.put(Protocol.TYPE_GET_GAME_CONTEXT, gameContextHandler);
+        handlers.put(Protocol.TYPE_SEND_CHAT, chatHandler);
+        handlers.put(Protocol.TYPE_EXECUTE_COMMAND, commandExecutionHandler);
+        handlers.put(Protocol.TYPE_ATTACK_TARGET, attackTargetHandler);
+        handlers.put(Protocol.TYPE_USE_SKILL, skillHandler);
+        handlers.put(Protocol.TYPE_GET_CONFIG, configHandler);
+        handlers.put(Protocol.TYPE_SET_MONITORED_MAID, configHandler);
+        messageRouter = new MessageRouter(handlers);
+
+        // Create WebSocket server
+        webSocketServer = new NekoWebSocketServer(messageRouter, pendingCommandManager);
 
         try {
             webSocketServer.start();
@@ -79,8 +106,8 @@ public class NekoTlmBridge {
     }
 
     private static void onServerTick(ServerTickEvent.Post event) {
-        if (messageHandler != null) {
-            messageHandler.tick();
+        if (messageRouter != null) {
+            messageRouter.tick();
         }
         if (webSocketServer != null) {
             webSocketServer.tickPendingCommands();
