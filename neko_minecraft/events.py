@@ -256,7 +256,7 @@ def format_event(event_data, assigned_maid_id):
         move_count = event_data.get("move_count", 0)
         is_maid_turn = event_data.get("is_maid_turn", False)
         priority = 4
-        turn_hint = "轮到我了..." if is_maid_turn else "轮到对方走了"
+        turn_hint = "轮到我了..." if is_maid_turn else "轮到玩家走了"
         context = _describe_board(event_data)
         parts_text = f"下{game_name}中...第{move_count}步，{turn_hint}。{context}"
         side_effects["chess_event"] = True
@@ -271,9 +271,9 @@ def format_event(event_data, assigned_maid_id):
         move_count = event_data.get("move_count", 0)
         priority = 9
         if result == "win":
-            parts_text = f"下{game_name}赢了！嘿嘿，我可是很厉害的～（和{opponent}下了{move_count}步）"
+            parts_text = f"下{game_name}你赢了！玩家输了（和{opponent}下了{move_count}步）"
         elif result == "lose":
-            parts_text = f"呜...下{game_name}输了...再来一局嘛！（和{opponent}下了{move_count}步）"
+            parts_text = f"呜...下{game_name}你输了（和{opponent}下了{move_count}步）玩家赢了"
         elif result == "draw":
             parts_text = f"下{game_name}平局了...势均力敌呢！（和{opponent}下了{move_count}步）"
         else:
