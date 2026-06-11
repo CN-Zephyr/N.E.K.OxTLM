@@ -261,7 +261,7 @@ def format_event(event_data, assigned_maid_id):
         parts_text = f"下{game_name}中...第{move_count}步，{turn_hint}。{context}"
         side_effects["chess_event"] = True
         side_effects["chess_event_type"] = "chess_mid_game"
-        side_effects["ai_behavior"] = "respond"
+        side_effects["ai_behavior"] = "read"
 
     elif event_type == "chess_game_end":
         game_type = event_data.get("game_type", "unknown")
