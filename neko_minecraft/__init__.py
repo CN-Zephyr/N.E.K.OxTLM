@@ -6,6 +6,7 @@ from plugin.sdk.plugin import (
     Ok, Err, SdkError,
 )
 import asyncio
+import os
 import sys
 import uuid
 
@@ -97,6 +98,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
         while True:
             try:
                 if self._bridge:
+                    if self._bridge.mc_exited:
+                        self.logger.info("[Poll] MC has exited, cleaning up plugin resources")
+                        self._awareness.stop()
+                        self._instructions_injected = False
+                        os._exit(0)
                     if self._bridge.connected and not self._instructions_injected:
                         await self._inject_instructions()
                     for data in self._bridge.drain():

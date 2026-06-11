@@ -3,10 +3,37 @@
 import asyncio
 import json
 import queue
+import subprocess
+import sys
 import threading
 
 import websockets
 from websockets.exceptions import ConnectionClosed
+
+
+def _is_java_running():
+    """检测 Java 进程（Minecraft）是否在运行"""
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq javaw.exe", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if "javaw.exe" in result.stdout:
+                return True
+            # 也检查 java.exe（服务端可能用这个）
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq java.exe", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return "java.exe" in result.stdout
+        else:
+            result = subprocess.run(
+                ["pgrep", "-x", "java"], capture_output=True, timeout=5,
+            )
+            return result.returncode == 0
+    except Exception:
+        return True  # 检测失败时假设还在运行，避免误判
 
 
 class WSBridge:
@@ -19,11 +46,13 @@ class WSBridge:
         self._ws = None
         self.connected = False
         self._running = False
+        self.mc_exited = False
         self._send_queue = queue.Queue()
         self._recv_queue = queue.Queue()
 
     def start(self):
         self._running = True
+        self.mc_exited = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -88,6 +117,10 @@ class WSBridge:
                 self._ws = None
 
             if self._running:
+                if not _is_java_running():
+                    self._logger.info("[WSBridge] Java process not found, MC has exited")
+                    self.mc_exited = True
+                    break
                 self._logger.info(f"[WSBridge] Reconnecting in {delay}s...")
                 try:
                     await asyncio.sleep(delay)
