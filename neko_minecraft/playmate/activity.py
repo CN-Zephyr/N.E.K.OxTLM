@@ -63,7 +63,7 @@ class PlayerActivityInference:
         if distance is not None and distance > 50:
             return "away"
         held = str(data.get("player_held_item", "")).lower()
-        if data.get("is_underground") or data.get("light_level", 15) < 8:
+        if data.get("is_underground"):
             if any(k in held for k in ("pickaxe", "torch", "ore")):
                 return "mining"
             return "underground_exploring"

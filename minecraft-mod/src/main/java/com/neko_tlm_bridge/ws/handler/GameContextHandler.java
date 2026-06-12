@@ -313,6 +313,9 @@ public class GameContextHandler implements MessageHandlerInterface {
             data.addProperty("player_y", player.getY());
             data.addProperty("player_z", player.getZ());
             data.addProperty("maid_player_distance", maid.distanceTo(player));
+            data.addProperty("light_level", player.level().getMaxLocalRawBrightness(player.blockPosition()));
+            data.addProperty("is_underground", player.getY() < player.level().getSeaLevel() - 1
+                    && !player.level().canSeeSky(player.blockPosition()));
 
             ItemStack heldItem = player.getMainHandItem();
             if (!heldItem.isEmpty()) {
