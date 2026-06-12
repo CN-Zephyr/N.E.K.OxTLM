@@ -64,6 +64,7 @@ def load_config(plugin):
                 plugin._assigned_maid_id = bridge.get("assigned_maid_id", "")
                 plugin._assigned_maid_name = bridge.get("assigned_maid_name", "")
                 plugin._awareness_interval = bridge.get("awareness_interval", plugin._awareness_interval)
+                _load_playmate_config(plugin, bridge)
                 return
         except Exception as e:
             plugin.logger.warning(f"Failed to load plugin.toml: {e}")
@@ -80,8 +81,23 @@ def load_config(plugin):
             plugin._assigned_maid_id = config.get("assigned_maid_id", "")
             plugin._assigned_maid_name = config.get("assigned_maid_name", "")
             plugin._awareness_interval = config.get("awareness_interval", plugin._awareness_interval)
+            _load_playmate_config(plugin, config)
     except Exception as e:
         plugin.logger.warning(f"Failed to load config: {e}")
+
+
+def _load_playmate_config(plugin, config):
+    plugin._playmate_memory_items = config.get("playmate_memory_items", plugin._playmate_memory_items)
+    plugin._playmate_memory_summary_length = config.get("playmate_memory_summary_length", plugin._playmate_memory_summary_length)
+    plugin._playmate_memory_inject_items = config.get("playmate_memory_inject_items", plugin._playmate_memory_inject_items)
+    plugin._playmate_memory_inject_chars = config.get("playmate_memory_inject_chars", plugin._playmate_memory_inject_chars)
+    plugin._playmate_activity_debounce_checks = config.get("playmate_activity_debounce_checks", plugin._playmate_activity_debounce_checks)
+    plugin._playmate_activity_cooldown = config.get("playmate_activity_cooldown", plugin._playmate_activity_cooldown)
+    plugin._playmate_quiet_stable_seconds = config.get("playmate_quiet_stable_seconds", plugin._playmate_quiet_stable_seconds)
+    plugin._playmate_quiet_cooldown = config.get("playmate_quiet_cooldown", plugin._playmate_quiet_cooldown)
+    plugin._playmate_aggregate_window = config.get("playmate_aggregate_window", plugin._playmate_aggregate_window)
+    plugin._playmate_throttle_window = config.get("playmate_throttle_window", plugin._playmate_throttle_window)
+    plugin._playmate_throttle_limit = config.get("playmate_throttle_limit", plugin._playmate_throttle_limit)
 
 
 def save_config(plugin):

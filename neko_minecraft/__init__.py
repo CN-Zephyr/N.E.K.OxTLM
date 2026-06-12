@@ -16,6 +16,7 @@ from . import config as _config
 from . import events as _events
 from .awareness import AwarenessManager
 from . import tools as _tools
+from .playmate import PlaymateContextManager, MinecraftPushRouter
 
 from .tool_defs import (
     MC_MAID_STATUS, MC_SWITCH_FOLLOW, MC_SWITCH_SIT,
@@ -45,6 +46,19 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._chat_box_enabled = True
         self._instructions_injected = False
         self._awareness_interval = 60
+        self._playmate_memory_items = 24
+        self._playmate_memory_summary_length = 120
+        self._playmate_memory_inject_items = 8
+        self._playmate_memory_inject_chars = 700
+        self._playmate_activity_debounce_checks = 2
+        self._playmate_activity_cooldown = 120
+        self._playmate_quiet_stable_seconds = 90
+        self._playmate_quiet_cooldown = 300
+        self._playmate_aggregate_window = 8
+        self._playmate_throttle_window = 30
+        self._playmate_throttle_limit = 6
+        self._minecraft_push = MinecraftPushRouter(self)
+        self._playmate = PlaymateContextManager(self)
         self._awareness = AwarenessManager(self)
 
     def _load_config(self):
@@ -53,9 +67,28 @@ class NekoMinecraftPlugin(NekoPluginBase):
     def _save_config(self):
         _config.save_config(self)
 
+    def _refresh_playmate_modules(self):
+        self._minecraft_push = MinecraftPushRouter(
+            self,
+            aggregate_window=self._playmate_aggregate_window,
+            throttle_window=self._playmate_throttle_window,
+            throttle_limit=self._playmate_throttle_limit,
+        )
+        self._playmate = PlaymateContextManager(self)
+
+    async def _push_minecraft_context(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None):
+        await self._minecraft_push.push(
+            text,
+            ai_behavior=ai_behavior,
+            priority=priority,
+            metadata=metadata,
+            aggregate=aggregate,
+        )
+
     @lifecycle(id="startup")
     async def on_startup(self, **_):
         self._load_config()
+        self._refresh_playmate_modules()
         self.logger.info(f"Python {sys.version}")
         self.logger.info(f"Event loop: {type(asyncio.get_event_loop())}")
         if self._assigned_maid_id:
@@ -92,6 +125,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._awareness.stop()
         if self._bridge:
             self._bridge.stop()
+        await self._minecraft_push.flush()
         return Ok({"status": "stopped"})
 
     async def _poll_messages(self):
@@ -171,9 +205,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
             chat_data = data.get("data", {})
             sender = chat_data.get("sender", "unknown")
             message = chat_data.get("message", "")
-            self.push_message(
-                source="minecraft", ai_behavior="respond",
-                parts=[{"type": "text", "text": f"{sender}说了: {message}"}],
+            text = f"{sender}说了: {message}"
+            self._playmate.remember_event("chat", text, priority=7)
+            await self._push_minecraft_context(
+                text,
+                ai_behavior="respond",
                 metadata={"description": f"Minecraft聊天消息 - {sender}: {message}"},
                 priority=7,
             )
@@ -189,6 +225,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         if parts_text is None:
             return
+        event_type = event_data.get("event_type", "event")
+        self._playmate.remember_event(event_type, parts_text, priority=priority)
         if side_effects:
             if "pending_revenge" in side_effects:
                 self._awareness._pending_revenge = side_effects["pending_revenge"]
@@ -207,15 +245,18 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 f"text={parts_text[:80]}"
             )
 
-            self.push_message(
-                source="minecraft", ai_behavior=ai_behavior,
-                parts=[{"type": "text", "text": parts_text}], priority=priority,
+            await self._push_minecraft_context(
+                parts_text,
+                ai_behavior=ai_behavior,
+                priority=priority,
+                aggregate=ai_behavior == "read" and priority <= 4,
             )
             return
 
-        self.push_message(
-            source="minecraft", ai_behavior="respond",
-            parts=[{"type": "text", "text": parts_text}], priority=priority,
+        await self._push_minecraft_context(
+            parts_text,
+            ai_behavior="respond",
+            priority=priority,
         )
 
     async def _send(self, data):

@@ -45,27 +45,29 @@ class AwarenessManager:
                 maid_id = self._plugin._resolve_maid_id()
                 if self._plugin._bridge and self._plugin._bridge.connected and maid_id:
                     changes = await self.detect_awareness_changes()
+                    awareness_state = self._last_awareness_state
+                    await self._plugin._playmate.observe_awareness(awareness_state)
                     if changes:
+                        self._plugin._playmate.remember_awareness(changes)
                         context_items = [c for c in changes if c.get("context_only")]
                         respond_items = [c for c in changes if not c.get("context_only")]
 
                         if context_items:
                             context_text = "；".join(c["text"] for c in context_items)
-                            self._plugin.push_message(
-                                source="minecraft",
+                            await self._plugin._push_minecraft_context(
+                                context_text,
                                 ai_behavior="read",
-                                parts=[{"type": "text", "text": context_text}],
                                 priority=1,
+                                aggregate=True,
                             )
 
                         if respond_items:
                             change_text = "；".join(c["text"] for c in respond_items)
                             has_urgent = any(c.get("urgent") for c in respond_items)
                             self._plugin.logger.info(f"[Awareness] Pushing: {change_text}")
-                            self._plugin.push_message(
-                                source="minecraft",
+                            await self._plugin._push_minecraft_context(
+                                change_text,
                                 ai_behavior="respond",
-                                parts=[{"type": "text", "text": change_text}],
                                 priority=6 if has_urgent else 3,
                             )
                 await asyncio.sleep(self._plugin._awareness_interval)
