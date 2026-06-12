@@ -12,7 +12,9 @@
 - **女仆行为控制** — 通过自然语言指令控制女仆的跟随/停留、坐下/站起、切换任务、切换日程、装备物品等
 - **游戏事件推送** — 将女仆受伤/死亡、玩家死亡、天气变化、昼夜变化、群系切换、成就解锁、背包物品变化等事件实时推送给 N.E.K.O
 - **定时感知系统** — 每5秒轮询游戏状态，检测玩家血量/着火/溺水、附近敌对生物、矿洞暗处、食物分享等，主动关心或提醒
+- **陪玩式感知增强** — 记录最近共同经历，推断玩家当前活动状态，并在长时间稳定游玩时低频主动陪一句
 - **上下文注入** — 持续更新玩家手持物品、附近结构/地标等信息到 LLM 上下文，为主动搭话提供素材
+- **Push 聚合与节流** — 低优先级上下文会短窗口合并后按时间顺序注入，紧急提醒和聊天消息仍会立即响应
 - **女仆聊天** — 让女仆在游戏内发送聊天消息并显示聊天气泡（TTS 由 N.E.K.O 处理，避免重复）(llm自主判断)
 - **技能系统** — 查询和使用车万女仆的 AI 技能（Skill）
 - **指令执行（需确认）** — N.E.K.O 可请求执行 Minecraft 指令，但需要玩家在游戏内点击确认，防止滥用
@@ -171,6 +173,39 @@ Python 侧插件每5秒轮询一次游戏状态（通过 `awareness` category �
 | 玩家手持物品  | 物品变化时（2次检测防抖）  | "伙伴手持物品: minecraft:diamond_swordx1" |
 | 附近结构/地标 | 新发现的结构（128格内）  | "附近发现结构: minecraft:village (距离45.0格)" |
 
+### 陪玩式感知
+
+在普通安全提醒之外，Python 侧插件还维护了一层低打扰的陪玩上下文：
+
+| 能力 | 说明 |
+| ---- | ---- |
+| 短期共同经历 | 记录最近 Minecraft 事件、聊天、感知变化和活动变化，按时间顺序整理成摘要 |
+| 活动状态推断 | 基于 awareness 数据推断玩家大致处于挖矿、地下探索、建造、闲置、战斗、远离等阶段 |
+| 安静陪伴触发 | 玩家稳定处于适合陪伴的状态一段时间后，低频触发一句简短自然的陪玩回应 |
+| 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
+| 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |
+
+当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、战斗中、玩家远离时不会触发安静陪伴，避免乱报和打扰。
+
+### N.E.K.O 插件侧配置
+
+以下配置位于 `neko_minecraft/plugin.toml` 的 `[minecraft_bridge]` 段：
+
+| 配置项 | 默认值 | 说明 |
+| ------ | ------ | ---- |
+| `awareness_interval` | `5` | awareness 轮询间隔，单位秒 |
+| `playmate_memory_items` | `24` | 短期共同经历最多保存条数 |
+| `playmate_memory_summary_length` | `120` | 单条短期记忆摘要最大长度 |
+| `playmate_memory_inject_items` | `8` | 注入共同经历时最多使用条数 |
+| `playmate_memory_inject_chars` | `700` | 注入共同经历文本最大长度 |
+| `playmate_activity_debounce_checks` | `2` | 活动状态需要连续命中几次才确认 |
+| `playmate_activity_cooldown` | `120` | 活动状态变化冷却时间，单位秒 |
+| `playmate_quiet_stable_seconds` | `90` | 同一活动稳定多久后允许安静陪伴触发 |
+| `playmate_quiet_cooldown` | `300` | 安静陪伴冷却时间，单位秒 |
+| `playmate_aggregate_window` | `8` | 低优先级上下文聚合窗口，单位秒 |
+| `playmate_throttle_window` | `30` | push 节流统计窗口，单位秒 |
+| `playmate_throttle_limit` | `6` | 节流窗口内允许的 push 次数 |
+
 ## 游戏内指令
 
 | 指令                          | 说明                            |
@@ -230,6 +265,13 @@ neko_minecraft/
 ├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
 ├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级）
 ├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
+├── playmate/            # 陪玩式感知增强（短期记忆、活动推断、安静陪伴、push 聚合）
+│   ├── __init__.py      # 子包导出入口
+│   ├── context.py       # 陪玩上下文总协调器
+│   ├── memory.py        # 短期共同经历记忆
+│   ├── activity.py      # 玩家活动状态推断
+│   ├── quiet.py         # 安静陪伴触发器
+│   └── push.py          # Minecraft 上下文 push 聚合与节流
 ├── tools.py             # LLM 工具业务逻辑（10个 do_* 函数）
 ├── tool_defs.py         # LLM 工具元数据常量（name/description/parameters）
 ├── config.json          # 默认配置
@@ -257,4 +299,3 @@ MIT License
 
 - [车万女仆 (Touhou Little Maid)](https://github.com/TartaricAcid/TouhouLittleMaid) — 提供了优秀的女仆系统与 AI 扩展 API
 - [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) — 自然语言 AI 控制框架，很好用的猫娘👍👍👍
-
