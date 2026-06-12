@@ -101,6 +101,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                     if self._bridge.mc_exited:
                         self.logger.info("[Poll] MC has exited, cleaning up plugin resources")
                         self._awareness.stop()
+                        self._bridge.stop()
                         self._instructions_injected = False
                         os._exit(0)
                     if self._bridge.connected and not self._instructions_injected:
