@@ -42,6 +42,11 @@ public class ConfigHandler implements MessageHandlerInterface {
         data.addProperty("chat_bubble_enabled", ModConfig.CHAT_BUBBLE_ENABLED.get());
         data.addProperty("chat_box_enabled", ModConfig.CHAT_BOX_ENABLED.get());
         data.addProperty("websocket_port", ModConfig.WEBSOCKET_PORT.get());
+        data.addProperty("behavior_aggregate_idle_ticks", ModConfig.BEHAVIOR_AGGREGATE_IDLE_TICKS.get());
+        data.addProperty("behavior_aggregate_max_window_ticks", ModConfig.BEHAVIOR_AGGREGATE_MAX_WINDOW_TICKS.get());
+        data.addProperty("block_activity_idle_ticks", ModConfig.BLOCK_ACTIVITY_IDLE_TICKS.get());
+        data.addProperty("block_activity_max_window_ticks", ModConfig.BLOCK_ACTIVITY_MAX_WINDOW_TICKS.get());
+        data.addProperty("block_activity_min_count", ModConfig.BLOCK_ACTIVITY_MIN_COUNT.get());
         response.add("data", data);
         return response;
     }

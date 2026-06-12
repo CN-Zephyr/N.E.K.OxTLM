@@ -98,6 +98,9 @@ def _load_playmate_config(plugin, config):
     plugin._playmate_aggregate_window = config.get("playmate_aggregate_window", plugin._playmate_aggregate_window)
     plugin._playmate_throttle_window = config.get("playmate_throttle_window", plugin._playmate_throttle_window)
     plugin._playmate_throttle_limit = config.get("playmate_throttle_limit", plugin._playmate_throttle_limit)
+    plugin._playmate_minigame_feedback_cooldown = config.get("playmate_minigame_feedback_cooldown", plugin._playmate_minigame_feedback_cooldown)
+    plugin._playmate_minigame_context_chars = config.get("playmate_minigame_context_chars", plugin._playmate_minigame_context_chars)
+    plugin._playmate_suggestion_cooldown = config.get("playmate_suggestion_cooldown", plugin._playmate_suggestion_cooldown)
 
 
 def save_config(plugin):

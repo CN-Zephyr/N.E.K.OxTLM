@@ -27,6 +27,7 @@ public final class Protocol {
     public static final String TYPE_CONFIG_UPDATE = "config_update";
 
     // New event types for companion awareness
+    public static final String EVENT_MAID_HURT = "maid_hurt";
     public static final String EVENT_MAID_DEATH = "maid_death";
     public static final String EVENT_PLAYER_DEATH = "player_death";
     public static final String EVENT_WEATHER_CHANGE = "weather_change";
@@ -34,6 +35,9 @@ public final class Protocol {
     public static final String EVENT_INVENTORY_CHANGE = "inventory_change";
     public static final String EVENT_ADVANCEMENT = "advancement";
     public static final String EVENT_BIOME_CHANGE = "biome_change";
+    public static final String EVENT_BLOCK_ACTIVITY = "block_activity";
+    public static final String EVENT_PLAYER_HURT = "player_hurt";
+    public static final String EVENT_PLAYER_KILL_ENTITY = "player_kill_entity";
 
     // Chess game events
     public static final String EVENT_CHESS_GAME_START = "chess_game_start";

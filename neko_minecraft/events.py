@@ -180,6 +180,38 @@ def format_event(event_data, assigned_maid_id):
                 f"好痛！{damage_detail}，{health_detail}"
                 f"（你就是「{maid_name}」）"
             )
+    elif event_type == "player_hurt":
+        priority = 4
+        count = event_data.get("count", 0)
+        total_damage = event_data.get("total_damage", 0)
+        last_health = event_data.get("last_health", "")
+        last_max_health = event_data.get("last_max_health", "")
+        primary_target = event_data.get("primary_target", "伙伴")
+        last_attacker = event_data.get("last_attacker", "")
+        includes_maid = event_data.get("includes_maid", False)
+        target_text = "玩家和女仆" if includes_maid and count > 1 else primary_target
+        attacker_text = f"，最近来源是{last_attacker}" if last_attacker else ""
+        health_text = f"，当前血量约{last_health}/{last_max_health}" if last_health != "" and last_max_health != "" else ""
+        parts_text = f"{target_text}刚刚连续受到{count}次伤害，总计约{total_damage}点{attacker_text}{health_text}。"
+        try:
+            low_health = float(last_health) <= float(last_max_health) * 0.45 if last_health != "" and last_max_health != "" else False
+        except Exception:
+            low_health = False
+        if count >= 3 or low_health or includes_maid:
+            priority = 7 if low_health else 5
+            parts_text += "请用一句很短、自然的陪玩语气关心一下，不要长篇解释。"
+        else:
+            side_effects["evidence_only"] = True
+    elif event_type == "player_kill_entity":
+        priority = 3
+        count = event_data.get("count", 0)
+        player_name_kill = event_data.get("player_name", "伙伴")
+        primary_target = event_data.get("primary_target", "敌人")
+        last_target = event_data.get("last_target", "")
+        target_text = primary_target.split(":")[-1] if isinstance(primary_target, str) else primary_target
+        last_text = f"，最近击杀了{last_target}" if last_target else ""
+        parts_text = f"{player_name_kill}刚刚连续击杀了{count}个实体，主要是{target_text}{last_text}。"
+        side_effects["evidence_only"] = True
     elif event_type == "maid_death":
         priority = 10
         cause = event_data.get("cause", "未知原因")
@@ -238,6 +270,31 @@ def format_event(event_data, assigned_maid_id):
             parts_text = "，".join(parts) + "～"
         else:
             return None, None, None  # No actual changes, skip
+
+    elif event_type == "block_activity":
+        priority = 2
+        action = event_data.get("action", "")
+        player_name_block = event_data.get("player_name", "伙伴")
+        count = event_data.get("count", 0)
+        primary_block = event_data.get("primary_block", "")
+        tendency = event_data.get("tendency", "")
+        top_blocks = event_data.get("top_blocks", []) or []
+        block_parts = []
+        for item in top_blocks[:3]:
+            block = item.get("block", "") if isinstance(item, dict) else ""
+            block_count = item.get("count", 0) if isinstance(item, dict) else 0
+            if block:
+                block_parts.append(f"{block}x{block_count}")
+        block_detail = "、".join(block_parts) or primary_block
+        verb = "破坏" if action == "break" else "放置" if action == "place" else "处理"
+        tendency_text = {
+            "mining": "挖矿",
+            "gathering": "采集整理",
+            "digging": "挖掘整理",
+            "building": "建造/布置",
+        }.get(tendency, tendency or "方块活动")
+        parts_text = f"{player_name_block}刚刚连续{verb}了{count}个方块，主要是{block_detail}，倾向于{tendency_text}。"
+        side_effects["evidence_only"] = True
 
     # ── 棋局事件 ──
     elif event_type == "chess_game_start":

@@ -94,6 +94,7 @@ public class NekoTlmBridge {
     private static void onServerStopping(ServerStoppingEvent event) {
         if (webSocketServer != null) {
             try {
+                GameEventHandler.flushPendingBehaviorEvents();
                 webSocketServer.stop();
                 LOGGER.info("N.E.K.O Bridge WebSocket server stopped");
             } catch (Exception e) {

@@ -205,6 +205,7 @@ Python 侧插件每5秒轮询一次游戏状态（通过 `awareness` category �
 | `playmate_aggregate_window` | `8` | 低优先级上下文聚合窗口，单位秒 |
 | `playmate_throttle_window` | `30` | push 节流统计窗口，单位秒 |
 | `playmate_throttle_limit` | `6` | 节流窗口内允许的 push 次数 |
+| `playmate_suggestion_cooldown` | `600` | 轻量主动建议冷却时间，单位秒 |
 
 ## 游戏内指令
 

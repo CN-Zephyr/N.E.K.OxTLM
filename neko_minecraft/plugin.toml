@@ -74,3 +74,6 @@ playmate_quiet_cooldown = 300
 playmate_aggregate_window = 8
 playmate_throttle_window = 30
 playmate_throttle_limit = 6
+playmate_minigame_feedback_cooldown = 90
+playmate_minigame_context_chars = 90
+playmate_suggestion_cooldown = 600

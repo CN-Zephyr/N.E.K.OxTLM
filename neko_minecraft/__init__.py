@@ -57,6 +57,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._playmate_aggregate_window = 8
         self._playmate_throttle_window = 30
         self._playmate_throttle_limit = 6
+        self._playmate_minigame_feedback_cooldown = 90
+        self._playmate_minigame_context_chars = 90
+        self._playmate_suggestion_cooldown = 600
         self._minecraft_push = MinecraftPushRouter(self)
         self._playmate = PlaymateContextManager(self)
         self._awareness = AwarenessManager(self)
@@ -226,32 +229,46 @@ class NekoMinecraftPlugin(NekoPluginBase):
         if parts_text is None:
             return
         event_type = event_data.get("event_type", "event")
-        self._playmate.remember_event(event_type, parts_text, priority=priority)
         if side_effects:
             if "pending_revenge" in side_effects:
                 self._awareness._pending_revenge = side_effects["pending_revenge"]
             if "was_dead" in side_effects:
                 self._awareness._was_dead = side_effects["was_dead"]
+            if side_effects.get("evidence_only"):
+                self._playmate.remember_event(event_type, parts_text, priority=priority)
+                self.logger.info(f"[Playmate] Evidence event stored: {event_type}, text={parts_text[:80]}")
+                return
 
         # 棋局事件特殊处理
         if side_effects.get("chess_event"):
-            ai_behavior = side_effects.get("ai_behavior", "respond")
             chess_event_type = side_effects.get("chess_event_type", "")
+            context_text = self._playmate.remember_minigame_event(
+                event_data,
+                parts_text,
+                priority,
+                side_effects,
+            )
 
             self.logger.info(
                 f"[Chess] Event: {chess_event_type}, "
                 f"game={event_data.get('game_type', '?')}, "
-                f"priority={priority}, ai_behavior={ai_behavior}, "
+                f"priority={priority}, feedback={bool(context_text)}, "
                 f"text={parts_text[:80]}"
             )
 
+            if not context_text:
+                return
+
+            ai_behavior = side_effects.get("ai_behavior", "read")
             await self._push_minecraft_context(
-                parts_text,
+                context_text,
                 ai_behavior=ai_behavior,
-                priority=priority,
-                aggregate=ai_behavior == "read" and priority <= 4,
+                priority=priority if ai_behavior == "respond" else 2,
+                aggregate=ai_behavior != "respond",
             )
             return
+
+        self._playmate.remember_event(event_type, parts_text, priority=priority)
 
         await self._push_minecraft_context(
             parts_text,

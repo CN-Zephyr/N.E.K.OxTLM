@@ -24,10 +24,10 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
-import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +44,100 @@ public class GameEventHandler {
     private static final Map<String, Map<Integer, String>> openInventorySnapshots = new HashMap<>();
     // The maid_id that the plugin wants us to monitor for inventory changes
     private static String monitoredMaidId = "";
+    private static final Map<String, BlockActivityAggregate> blockActivityAggregates = new HashMap<>();
+    private static final BehaviorAggregate hurtAggregate = new BehaviorAggregate(Protocol.EVENT_PLAYER_HURT);
+    private static final BehaviorAggregate killAggregate = new BehaviorAggregate(Protocol.EVENT_PLAYER_KILL_ENTITY);
+
+    private static class BlockActivityAggregate {
+        final String action;
+        final String playerId;
+        final String playerName;
+        final Map<String, Integer> blocks = new HashMap<>();
+        long startTick;
+        long endTick;
+        int count;
+
+        BlockActivityAggregate(String action, Player player, long tick) {
+            this.action = action;
+            this.playerId = player.getStringUUID();
+            this.playerName = player.getName().getString();
+            this.startTick = tick;
+            this.endTick = tick;
+        }
+
+        void add(String blockId, long tick) {
+            blocks.put(blockId, blocks.getOrDefault(blockId, 0) + 1);
+            count++;
+            endTick = tick;
+        }
+    }
+
+    private static class BehaviorAggregate {
+        final String eventType;
+        final Map<String, Integer> targets = new HashMap<>();
+        String playerName = "";
+        String lastTarget = "";
+        String lastAttacker = "";
+        long startTick;
+        long endTick;
+        int count;
+        float totalDamage;
+        float lastHealth;
+        float lastMaxHealth;
+        boolean includesMaid;
+
+        BehaviorAggregate(String eventType) {
+            this.eventType = eventType;
+        }
+
+        void recordHurt(String targetName, boolean maid, float damage, float health, float maxHealth, String attacker, long tick) {
+            beginIfNeeded(tick);
+            targets.put(targetName, targets.getOrDefault(targetName, 0) + 1);
+            lastTarget = targetName;
+            lastAttacker = attacker;
+            endTick = tick;
+            count++;
+            totalDamage += damage;
+            lastHealth = health;
+            lastMaxHealth = maxHealth;
+            includesMaid = includesMaid || maid;
+        }
+
+        void recordKill(String player, String targetType, String targetName, long tick) {
+            beginIfNeeded(tick);
+            playerName = player;
+            String target = targetType == null || targetType.isEmpty() ? targetName : targetType;
+            targets.put(target, targets.getOrDefault(target, 0) + 1);
+            lastTarget = targetName;
+            endTick = tick;
+            count++;
+        }
+
+        boolean isActive() {
+            return count > 0;
+        }
+
+        void reset() {
+            targets.clear();
+            playerName = "";
+            lastTarget = "";
+            lastAttacker = "";
+            startTick = 0;
+            endTick = 0;
+            count = 0;
+            totalDamage = 0;
+            lastHealth = 0;
+            lastMaxHealth = 0;
+            includesMaid = false;
+        }
+
+        private void beginIfNeeded(long tick) {
+            if (count == 0) {
+                startTick = tick;
+                endTick = tick;
+            }
+        }
+    }
 
     public static void setMonitoredMaidId(String maidId) {
         monitoredMaidId = maidId != null ? maidId : "";
@@ -53,21 +147,63 @@ public class GameEventHandler {
         webSocketServer = server;
     }
 
+    public static void flushPendingBehaviorEvents() {
+        flushBehaviorAggregates(Long.MAX_VALUE, true);
+    }
+
+    @SubscribeEvent
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
+        Player player = event.getPlayer();
+        if (player == null || player.level().isClientSide()) return;
+        if (!shouldTrackPlayerBlockActivity(player)) return;
+        String blockId = BuiltInRegistries.BLOCK.getKey(event.getState().getBlock()).toString();
+        recordBlockActivity("break", player, blockId, player.level().getGameTime());
+    }
+
+    @SubscribeEvent
+    public static void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
+        if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
+        if (!(event.getEntity() instanceof Player player) || player.level().isClientSide()) return;
+        if (!shouldTrackPlayerBlockActivity(player)) return;
+        String blockId = BuiltInRegistries.BLOCK.getKey(event.getPlacedBlock().getBlock()).toString();
+        recordBlockActivity("place", player, blockId, player.level().getGameTime());
+    }
+
     @SubscribeEvent
     public static void onLivingHurt(LivingIncomingDamageEvent event) {
         if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
-        if (event.getEntity() instanceof EntityMaid maid) {
+        LivingEntity entity = event.getEntity();
+        if (entity instanceof Player player) {
+            hurtAggregate.recordHurt(
+                    player.getName().getString(),
+                    false,
+                    event.getAmount(),
+                    Math.max(0, player.getHealth() - event.getAmount()),
+                    player.getMaxHealth(),
+                    attackerName(event),
+                    player.level().getGameTime()
+            );
+        } else if (entity instanceof EntityMaid maid) {
+            if (!monitoredMaidId.isEmpty() && !monitoredMaidId.equals(maid.getStringUUID())) return;
             JsonObject eventData = new JsonObject();
-            eventData.addProperty("event_type", "maid_hurt");
+            eventData.addProperty("event_type", Protocol.EVENT_MAID_HURT);
             eventData.addProperty("maid_id", maid.getStringUUID());
             eventData.addProperty("maid_name", maid.getName().getString());
             eventData.addProperty("damage", event.getAmount());
-            eventData.addProperty("health", maid.getHealth() - event.getAmount());
+            eventData.addProperty("health", Math.max(0, maid.getHealth() - event.getAmount()));
             eventData.addProperty("max_health", maid.getMaxHealth());
-            if (event.getSource().getEntity() instanceof Player player) {
-                eventData.addProperty("attacker", player.getName().getString());
-            }
+            eventData.addProperty("attacker", attackerName(event));
             webSocketServer.broadcastEvent(eventData);
+            hurtAggregate.recordHurt(
+                    maid.getName().getString(),
+                    true,
+                    event.getAmount(),
+                    Math.max(0, maid.getHealth() - event.getAmount()),
+                    maid.getMaxHealth(),
+                    attackerName(event),
+                    maid.level().getGameTime()
+            );
         }
     }
 
@@ -115,6 +251,15 @@ public class GameEventHandler {
                 eventData.addProperty("killer", killer.getName().getString());
             }
             webSocketServer.broadcastEvent(eventData);
+        }
+
+        if (!(entity instanceof Player) && !(entity instanceof EntityMaid) && event.getSource().getEntity() instanceof Player player) {
+            killAggregate.recordKill(
+                    player.getName().getString(),
+                    BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(),
+                    entity.getName().getString(),
+                    entity.level().getGameTime()
+            );
         }
     }
 
@@ -172,6 +317,9 @@ public class GameEventHandler {
         if (overworld == null) return;
 
         long currentTick = overworld.getGameTime();
+
+        flushBehaviorAggregates(currentTick, false);
+        flushExpiredBlockActivities(currentTick, false);
 
         // Biome change detection (runs every tick for debounce accuracy)
         if (!monitoredMaidId.isEmpty()) {
@@ -386,6 +534,177 @@ public class GameEventHandler {
             }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    private static boolean shouldTrackPlayerBlockActivity(Player player) {
+        if (monitoredMaidId.isEmpty() || player.getServer() == null) return false;
+        EntityMaid maid = findMaidById(monitoredMaidId, player.getServer());
+        if (maid == null || maid.getOwner() == null) return false;
+        if (!maid.getOwner().getUUID().equals(player.getUUID())) return false;
+        if (!maid.level().dimension().equals(player.level().dimension())) return false;
+        return maid.distanceTo(player) <= 64;
+    }
+
+    private static String attackerName(LivingIncomingDamageEvent event) {
+        if (event.getSource().getEntity() instanceof LivingEntity attacker) {
+            return attacker.getName().getString();
+        }
+        return event.getSource().getMsgId();
+    }
+
+    private static void flushBehaviorAggregates(long currentTick, boolean force) {
+        if (shouldFlushBehaviorAggregate(hurtAggregate, currentTick, force)) {
+            flushBehaviorAggregate(hurtAggregate);
+        }
+        if (shouldFlushBehaviorAggregate(killAggregate, currentTick, force)) {
+            flushBehaviorAggregate(killAggregate);
+        }
+    }
+
+    private static boolean shouldFlushBehaviorAggregate(BehaviorAggregate aggregate, long currentTick, boolean force) {
+        return aggregate.isActive() && (force
+                || currentTick - aggregate.endTick >= ModConfig.BEHAVIOR_AGGREGATE_IDLE_TICKS.get()
+                || currentTick - aggregate.startTick >= ModConfig.BEHAVIOR_AGGREGATE_MAX_WINDOW_TICKS.get());
+    }
+
+    private static void flushBehaviorAggregate(BehaviorAggregate aggregate) {
+        if (!aggregate.isActive()) return;
+
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", aggregate.eventType);
+        eventData.addProperty("count", aggregate.count);
+        eventData.addProperty("start_tick", aggregate.startTick);
+        eventData.addProperty("end_tick", aggregate.endTick);
+        eventData.addProperty("duration_ticks", Math.max(0, aggregate.endTick - aggregate.startTick));
+        eventData.addProperty("primary_target", primaryTarget(aggregate));
+
+        if (Protocol.EVENT_PLAYER_HURT.equals(aggregate.eventType)) {
+            eventData.addProperty("total_damage", aggregate.totalDamage);
+            eventData.addProperty("last_health", aggregate.lastHealth);
+            eventData.addProperty("last_max_health", aggregate.lastMaxHealth);
+            eventData.addProperty("last_target", aggregate.lastTarget);
+            eventData.addProperty("last_attacker", aggregate.lastAttacker);
+            eventData.addProperty("includes_maid", aggregate.includesMaid);
+        } else if (Protocol.EVENT_PLAYER_KILL_ENTITY.equals(aggregate.eventType)) {
+            eventData.addProperty("player_name", aggregate.playerName);
+            eventData.addProperty("last_target", aggregate.lastTarget);
+        }
+
+        JsonArray targets = new JsonArray();
+        java.util.List<Map.Entry<String, Integer>> entries = new java.util.ArrayList<>(aggregate.targets.entrySet());
+        entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        for (int i = 0; i < Math.min(5, entries.size()); i++) {
+            Map.Entry<String, Integer> entry = entries.get(i);
+            JsonObject target = new JsonObject();
+            target.addProperty("target", entry.getKey());
+            target.addProperty("count", entry.getValue());
+            targets.add(target);
+        }
+        eventData.add("targets", targets);
+        aggregate.reset();
+        webSocketServer.broadcastEvent(eventData);
+    }
+
+    private static String primaryTarget(BehaviorAggregate aggregate) {
+        String target = "";
+        int count = 0;
+        for (Map.Entry<String, Integer> entry : aggregate.targets.entrySet()) {
+            if (entry.getValue() > count) {
+                target = entry.getKey();
+                count = entry.getValue();
+            }
+        }
+        return target;
+    }
+
+    private static void recordBlockActivity(String action, Player player, String blockId, long tick) {
+        String key = player.getStringUUID() + ":" + action;
+        BlockActivityAggregate aggregate = blockActivityAggregates.get(key);
+        if (aggregate == null) {
+            aggregate = new BlockActivityAggregate(action, player, tick);
+            blockActivityAggregates.put(key, aggregate);
+        }
+        aggregate.add(blockId, tick);
+        if (tick - aggregate.startTick >= ModConfig.BLOCK_ACTIVITY_MAX_WINDOW_TICKS.get()) {
+            flushBlockActivity(key, aggregate);
+        }
+    }
+
+    private static void flushExpiredBlockActivities(long currentTick, boolean force) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        for (Map.Entry<String, BlockActivityAggregate> entry : blockActivityAggregates.entrySet()) {
+            BlockActivityAggregate aggregate = entry.getValue();
+            if (force || currentTick - aggregate.endTick >= ModConfig.BLOCK_ACTIVITY_IDLE_TICKS.get()) {
+                keys.add(entry.getKey());
+            }
+        }
+        for (String key : keys) {
+            BlockActivityAggregate aggregate = blockActivityAggregates.get(key);
+            if (aggregate != null) {
+                flushBlockActivity(key, aggregate);
+            }
+        }
+    }
+
+    private static void flushBlockActivity(String key, BlockActivityAggregate aggregate) {
+        blockActivityAggregates.remove(key);
+        if (aggregate.count < ModConfig.BLOCK_ACTIVITY_MIN_COUNT.get()) return;
+
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_BLOCK_ACTIVITY);
+        eventData.addProperty("action", aggregate.action);
+        eventData.addProperty("player_id", aggregate.playerId);
+        eventData.addProperty("player_name", aggregate.playerName);
+        eventData.addProperty("count", aggregate.count);
+        eventData.addProperty("start_tick", aggregate.startTick);
+        eventData.addProperty("end_tick", aggregate.endTick);
+        eventData.addProperty("duration_ticks", Math.max(0, aggregate.endTick - aggregate.startTick));
+        eventData.addProperty("primary_block", primaryBlock(aggregate));
+        eventData.addProperty("tendency", inferBlockTendency(aggregate));
+
+        JsonArray topBlocks = new JsonArray();
+        java.util.List<Map.Entry<String, Integer>> entries = new java.util.ArrayList<>(aggregate.blocks.entrySet());
+        entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        for (int i = 0; i < Math.min(5, entries.size()); i++) {
+            Map.Entry<String, Integer> entry = entries.get(i);
+            JsonObject block = new JsonObject();
+            block.addProperty("block", entry.getKey());
+            block.addProperty("count", entry.getValue());
+            topBlocks.add(block);
+        }
+        eventData.add("top_blocks", topBlocks);
+        webSocketServer.broadcastEvent(eventData);
+    }
+
+    private static String primaryBlock(BlockActivityAggregate aggregate) {
+        String block = "";
+        int count = 0;
+        for (Map.Entry<String, Integer> entry : aggregate.blocks.entrySet()) {
+            if (entry.getValue() > count) {
+                block = entry.getKey();
+                count = entry.getValue();
+            }
+        }
+        return block;
+    }
+
+    private static String inferBlockTendency(BlockActivityAggregate aggregate) {
+        if ("place".equals(aggregate.action)) return "building";
+        int mining = 0;
+        int gathering = 0;
+        for (Map.Entry<String, Integer> entry : aggregate.blocks.entrySet()) {
+            String block = entry.getKey();
+            int count = entry.getValue();
+            if (block.contains("ore") || block.contains("stone") || block.contains("deepslate") || block.contains("netherrack") || block.contains("tuff")) {
+                mining += count;
+            }
+            if (block.contains("log") || block.contains("leaves") || block.contains("dirt") || block.contains("sand") || block.contains("gravel")) {
+                gathering += count;
+            }
+        }
+        if (mining >= Math.max(2, aggregate.count / 2)) return "mining";
+        if (gathering >= Math.max(2, aggregate.count / 2)) return "gathering";
+        return "digging";
     }
 
     // ── Chess game detection ──

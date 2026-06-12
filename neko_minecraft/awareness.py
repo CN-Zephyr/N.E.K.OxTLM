@@ -14,8 +14,6 @@ class AwarenessManager:
         self._last_fire_warn_time = 0
         self._last_drown_warn_time = 0
         self._last_hostile_warn_time = 0
-        self._last_food_offer_time = 0
-        self._last_dark_warn_time = 0
         self._pending_revenge = None
         self._was_dead = False
         self._last_notified_held_item = ""
@@ -46,9 +44,10 @@ class AwarenessManager:
                 if self._plugin._bridge and self._plugin._bridge.connected and maid_id:
                     changes = await self.detect_awareness_changes()
                     awareness_state = self._last_awareness_state
-                    await self._plugin._playmate.observe_awareness(awareness_state)
                     if changes:
                         self._plugin._playmate.remember_awareness(changes)
+                    await self._plugin._playmate.observe_awareness(awareness_state)
+                    if changes:
                         context_items = [c for c in changes if c.get("context_only")]
                         respond_items = [c for c in changes if not c.get("context_only")]
 
@@ -204,28 +203,11 @@ class AwarenessManager:
                 self._last_drown_warn_time = now
                 changes.append({"text": "玩家在溺水！提醒快上岸！", "urgent": True})
 
-            # === 3. Proactive inventory sharing ===
+            # === 3. Maid inventory context ===
             new_inventory = new_state["maid_inventory"]
-            torch_keywords = ["torch", "soul_torch"]
-            has_torches = any(any(tk in item.get("item", "") for tk in torch_keywords) for item in new_inventory)
-            if new_inventory:
-                food_keywords = ["bread", "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
-                                 "cooked_cod", "cooked_salmon", "baked_potato", "golden_carrot", "apple",
-                                 "melon_slice", "cookie", "cake", "pumpkin_pie"]
-                has_food = any(any(fk in item.get("item", "") for fk in food_keywords) for item in new_inventory)
-
-                if has_food and new_player_health < player_max_health * 0.7 and now - self._last_food_offer_time > 300:
-                    self._last_food_offer_time = now
-                    changes.append({"text": "询问玩家饿不饿？我这里有点吃的～", "urgent": False})
-
-            # === 4. Dark cave torch suggestion ===
-            if (new_state["is_underground"] and new_state["light_level"] < 7
-                    and now - self._last_dark_warn_time > 600):
-                self._last_dark_warn_time = now
-                if has_torches:
-                    changes.append({"text": "这里好暗...询问玩家要不要我帮忙插火把？", "urgent": False})
-                else:
-                    changes.append({"text": "这里好暗...表达有点害怕，可惜没有火把了", "urgent": False})
+            if new_inventory != old_state.get("maid_inventory", []):
+                item_count = sum(int(item.get("count", 1) or 1) for item in new_inventory)
+                changes.append({"text": f"女仆背包状态已更新，共{item_count}件物品", "urgent": False, "context_only": True})
 
             # Hostile entities
             old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}

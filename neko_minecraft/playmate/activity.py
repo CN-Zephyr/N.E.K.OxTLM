@@ -51,6 +51,9 @@ class PlayerActivityInference:
         return ActivityUpdate(state=state, label=label, text=text)
 
     def _classify(self, data, memory):
+        evidence_state = self._recent_evidence_activity(memory)
+        if evidence_state:
+            return evidence_state
         if data.get("player_on_fire") or data.get("player_is_drowning"):
             return "combat"
         player_health = data.get("player_health", 20) or 20
@@ -86,13 +89,35 @@ class PlayerActivityInference:
                 return True
         return False
 
-    def _recent_memory_matches(self, memory, keywords):
+    def _recent_evidence_activity(self, memory):
         if not memory:
-            return False
-        for item in memory.recent(5):
-            if any(keyword in item.summary for keyword in keywords):
-                return True
-        return False
+            return None
+        now = time.time()
+        for item in reversed(memory.recent(8)):
+            if item.kind in ("player_hurt", "maid_hurt", "player_kill_entity"):
+                if now - item.timestamp > 45:
+                    continue
+                return "combat"
+            if item.kind == "block_activity":
+                if now - item.timestamp > 120:
+                    continue
+                state = self._block_activity_state(item.summary)
+                if state:
+                    return state
+        return None
+
+    def _block_activity_state(self, text):
+        if "倾向于挖矿" in text:
+            return "mining"
+        if "倾向于建造/布置" in text:
+            return "building"
+        if "倾向于采集整理" in text or "倾向于挖掘整理" in text:
+            return "gathering"
+        if "连续放置" in text:
+            return "building"
+        if "连续破坏" in text:
+            return "gathering"
+        return None
 
     def _is_building_item(self, held):
         if not held:
