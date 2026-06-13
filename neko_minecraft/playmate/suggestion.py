@@ -57,10 +57,27 @@ class ProactiveSuggestionTrigger:
             if "pickaxe" in held and not has_torches:
                 return "mining_no_torch", "玩家像是在挖矿，但女仆背包里没看到火把。可以低频、轻轻提醒补光资源可能不多，不要像库存管理。", True
 
-        if stable_state in ("building", "gathering") and inventory:
+        if stable_state in ("building", "base_building", "gathering") and inventory:
             useful_blocks = self._top_items(inventory, ("planks", "stone", "cobblestone", "dirt", "glass", "brick", "torch", "lantern"))
             if useful_blocks:
                 return "build_inventory", f"玩家在{self._state_label(stable_state)}，女仆背包里有{useful_blocks}。可以自然提一句也许能帮上忙，保持一句话、低打扰。", False
+
+        if stable_state == "fishing":
+            return "fishing_wait", "玩家像是在钓鱼，适合低频来一句很轻松的陪等吐槽或小声加油，不要催促也不要打断节奏。", True
+
+        if stable_state == "traveling":
+            structures = data.get("nearby_structures") or []
+            if structures:
+                names = "、".join(str(s.get("name", "")).split(":")[-1] for s in structures[:2] if s.get("name"))
+                if names:
+                    return "travel_structure", f"玩家像是在赶路或跑图，附近有{names}。可以作为只读素材，之后自然接一句要不要去看看。", False
+            return "travel_companion", "玩家像是在赶路，适合作为只读陪玩素材：女仆可以表现自己跟得上、会陪着走，不需要立刻打断。", False
+
+        if stable_state == "organizing":
+            return "organizing_quiet", "玩家像是在整理物品或背包。这里只作为只读素材，保持安静陪着，不要主动打扰。", False
+
+        if stable_state == "mob_farming":
+            return "mob_farming", "玩家刚结束一波刷怪或战斗收尾。可以作为只读素材，之后自然夸一句打得不错，不要在战斗中分散注意。", False
 
         player_health = data.get("player_health", 20) or 20
         player_max_health = data.get("player_max_health", 20) or 20
@@ -88,5 +105,6 @@ class ProactiveSuggestionTrigger:
     def _state_label(self, stable_state):
         return {
             "building": "建造/布置",
+            "base_building": "建家/布置",
             "gathering": "采集整理",
         }.get(stable_state, stable_state)

@@ -66,6 +66,8 @@ class PlayerActivityInference:
         if distance is not None and distance > 50:
             return "away"
         held = str(data.get("player_held_item", "")).lower()
+        if "fishing_rod" in held:
+            return "fishing"
         if data.get("is_underground"):
             if any(k in held for k in ("pickaxe", "torch", "ore")):
                 return "mining"
@@ -73,12 +75,16 @@ class PlayerActivityInference:
         if any(k in held for k in ("pickaxe", "shovel", "axe")):
             return "gathering"
         if self._is_building_item(held):
-            return "building"
+            return "base_building"
         if any(k in held for k in ("sword", "bow", "crossbow", "trident", "shield")):
             return "danger_exploring"
+        if self._has_inventory_context(data):
+            return "organizing"
         structures = data.get("nearby_structures") or []
         if structures:
             return "exploring"
+        if self._has_travel_hint(data, memory):
+            return "traveling"
         if not held:
             return "idle"
         return "unknown"
@@ -94,10 +100,14 @@ class PlayerActivityInference:
             return None
         now = time.time()
         for item in reversed(memory.recent(8)):
-            if item.kind in ("player_hurt", "maid_hurt", "player_kill_entity"):
+            if item.kind in ("player_hurt", "maid_hurt"):
                 if now - item.timestamp > 45:
                     continue
                 return "combat"
+            if item.kind == "player_kill_entity":
+                if now - item.timestamp > 90:
+                    continue
+                return self._kill_activity_state(item.summary)
             if item.kind == "block_activity":
                 if now - item.timestamp > 120:
                     continue
@@ -110,14 +120,41 @@ class PlayerActivityInference:
         if "倾向于挖矿" in text:
             return "mining"
         if "倾向于建造/布置" in text:
-            return "building"
+            return "base_building"
         if "倾向于采集整理" in text or "倾向于挖掘整理" in text:
             return "gathering"
         if "连续放置" in text:
-            return "building"
+            return "base_building"
         if "连续破坏" in text:
             return "gathering"
         return None
+
+    def _kill_activity_state(self, text):
+        lower = str(text or "").lower()
+        mob_keywords = ("zombie", "skeleton", "creeper", "spider", "slime", "phantom", "witch", "blaze")
+        if any(keyword in lower for keyword in mob_keywords):
+            return "mob_farming"
+        return "combat"
+
+    def _has_inventory_context(self, data):
+        held = str(data.get("player_held_item", "")).lower()
+        if any(k in held for k in ("chest", "barrel", "shulker_box", "bundle")):
+            return True
+        inventory = data.get("maid_inventory") or []
+        return len(inventory) >= 18 and not data.get("is_underground")
+
+    def _has_travel_hint(self, data, memory):
+        distance = data.get("maid_player_distance")
+        if distance is not None and 18 <= distance <= 50:
+            held = str(data.get("player_held_item", "")).lower()
+            if any(k in held for k in ("map", "compass", "elytra", "boat", "minecart")):
+                return True
+            if data.get("nearby_structures"):
+                return True
+        if not memory:
+            return False
+        recent_kinds = [item.kind for item in memory.recent(5)]
+        return "block_activity" not in recent_kinds and "player_kill_entity" not in recent_kinds and distance is not None and distance > 24
 
     def _is_building_item(self, held):
         if not held:
@@ -143,8 +180,12 @@ class PlayerActivityInference:
             "underground_exploring": "地下探索",
             "gathering": "采集整理",
             "building": "建造/整理",
+            "base_building": "建家/布置",
             "danger_exploring": "危险探索",
             "organizing": "整理物品",
+            "fishing": "钓鱼",
+            "traveling": "赶路/跑图",
+            "mob_farming": "刷怪/战斗收尾",
             "exploring": "探索",
             "idle": "闲置",
         }.get(state, state)

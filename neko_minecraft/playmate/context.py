@@ -30,12 +30,15 @@ class PlaymateContextManager:
             cooldown_seconds=plugin._playmate_suggestion_cooldown,
         )
         self._last_observed_state = "unknown"
+        self._current_goal = ""
 
     def remember_event(self, event_type, text, priority=1):
         return self.memory.remember(event_type or "event", text, priority=priority)
 
     def remember_minigame_event(self, event_data, text, priority, side_effects):
-        return self.minigame.record(event_data, text, priority, side_effects or {}, self.memory)
+        context_text = self.minigame.record(event_data, text, priority, side_effects or {}, self.memory)
+        self._current_goal = self.minigame.current_goal or self._current_goal
+        return context_text
 
     def remember_awareness(self, changes):
         for change in changes or []:
@@ -60,7 +63,8 @@ class PlaymateContextManager:
                 ai_behavior = "respond"
                 priority = 3
                 aggregate = False
-            text = f"{activity_text}\n最近共同经历：\n{summary}" if summary else activity_text
+            self._current_goal = self._goal_for_state(update.state, update.label)
+            text = self._with_shared_context(activity_text, summary)
             await self._plugin._push_minecraft_context(text, ai_behavior=ai_behavior, priority=priority, aggregate=aggregate)
         stable_state = self.activity.stable_state
         if stable_state != self._last_observed_state:
@@ -78,7 +82,7 @@ class PlaymateContextManager:
                 limit=self._plugin._playmate_memory_inject_items,
                 max_text_length=self._plugin._playmate_memory_inject_chars,
             )
-            text = f"{quiet_text}\n最近共同经历：\n{summary}" if summary else quiet_text
+            text = self._with_shared_context(quiet_text, summary)
             await self._plugin._push_minecraft_context(text, ai_behavior="respond", priority=3, aggregate=False)
         suggestion = None
         if not quiet_text:
@@ -97,13 +101,34 @@ class PlaymateContextManager:
                 limit=self._plugin._playmate_memory_inject_items,
                 max_text_length=self._plugin._playmate_memory_inject_chars,
             )
-            text = f"{suggestion_text}\n最近共同经历：\n{summary}" if summary else suggestion_text
+            text = self._with_shared_context(suggestion_text, summary)
             await self._plugin._push_minecraft_context(
                 text,
                 ai_behavior="respond" if should_respond else "read",
                 priority=3 if should_respond else 1,
                 aggregate=not should_respond,
             )
+
+    def _with_shared_context(self, text, summary):
+        parts = [text]
+        if self._current_goal:
+            parts.append(f"当前共同目标：{self._current_goal}")
+        if summary:
+            parts.append(f"最近共同经历：\n{summary}")
+        return "\n".join(parts)
+
+    def _goal_for_state(self, state, label):
+        goals = {
+            "mining": "一起下矿，注意照明和安全",
+            "underground_exploring": "一起探洞，留意怪物和回路",
+            "base_building": "一起建家/布置据点",
+            "building": "一起建造和整理当前区域",
+            "fishing": "一起钓鱼，安静等鱼上钩",
+            "traveling": "一起赶路/跑图，看看前面有什么",
+            "mob_farming": "一起处理刷怪和战斗收尾",
+            "organizing": "陪玩家整理物品，尽量少打扰",
+        }
+        return goals.get(state, f"一起进行{label}") if state not in ("unknown", "idle", "away") else ""
 
     def _recent_chat_seconds(self):
         for item in reversed(self.memory.recent(12)):

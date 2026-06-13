@@ -173,12 +173,12 @@ def format_event(event_data, assigned_maid_id):
         if attacker:
             parts_text = (
                 f"好痛！被{attacker}打了！{damage_detail}，{health_detail}"
-                f"（你就是「{maid_name}」）"
+                f"（你就是「{maid_name}」）。即时情绪：害怕、委屈但还想撑住，适合短句求助或撒娇式抱怨。"
             )
         else:
             parts_text = (
                 f"好痛！{damage_detail}，{health_detail}"
-                f"（你就是「{maid_name}」）"
+                f"（你就是「{maid_name}」）。即时情绪：有点受惊和委屈，适合短句表达痛感，不要长篇解释。"
             )
     elif event_type == "player_hurt":
         priority = 4
@@ -197,9 +197,19 @@ def format_event(event_data, assigned_maid_id):
             low_health = float(last_health) <= float(last_max_health) * 0.45 if last_health != "" and last_max_health != "" else False
         except Exception:
             low_health = False
-        if count >= 3 or low_health or includes_maid:
-            priority = 7 if low_health else 5
-            parts_text += "请用一句很短、自然的陪玩语气关心一下，不要长篇解释。"
+        try:
+            heavy_damage = float(total_damage) >= max(6.0, float(last_max_health) * 0.3) if last_max_health != "" else float(total_damage) >= 6.0
+        except Exception:
+            heavy_damage = False
+        if low_health:
+            priority = 7
+            parts_text += "玩家状态明显危险，适合立刻用一句短句表达担心并提醒先保命，不要复述数字。"
+        elif includes_maid:
+            priority = 6
+            parts_text += "玩家和女仆都被波及，适合用一句有陪伴感的紧张回应，表现想一起撑过去。"
+        elif count >= 4 or heavy_damage:
+            priority = 5
+            parts_text += "这是比较明显的一波受伤，适合短短关心或提醒躲一下，不要长篇解释。"
         else:
             side_effects["evidence_only"] = True
     elif event_type == "player_kill_entity":
@@ -220,18 +230,18 @@ def format_event(event_data, assigned_maid_id):
         side_effects["was_dead"] = True
         parts_text = (
             f"你倒下了...（死因: {cause}）"
-            f"（你就是「{maid_name}」）"
+            f"（你就是「{maid_name}」）。即时情绪：失落、不甘心，也会担心玩家接下来一个人。"
         )
     elif event_type == "player_death":
         priority = 9
         cause = event_data.get("cause", "未知原因")
         dead_player = event_data.get("player_name", "伙伴")
-        parts_text = f"啊！{dead_player}死了！没事吧？！（死因: {cause}）"
+        parts_text = f"啊！{dead_player}死了！（死因: {cause}）即时情绪：震惊、担心和想赶过去陪着，适合一句短促关心。"
     elif event_type == "advancement":
         priority = 7
         adv_player = event_data.get("player_name", "伙伴")
         title = event_data.get("title", "某个成就")
-        parts_text = f"哇！{adv_player}解锁了成就「{title}」！好厉害！"
+        parts_text = f"{adv_player}解锁了成就「{title}」。即时情绪：开心、骄傲，适合一句像朋友一样的夸奖。"
     elif event_type == "biome_change":
         priority = 5
         biome = event_data.get("biome", "")
@@ -242,18 +252,18 @@ def format_event(event_data, assigned_maid_id):
         raining = event_data.get("raining", False)
         thundering = event_data.get("thundering", False)
         if thundering:
-            parts_text = "打雷了！好可怕..."
+            parts_text = "天气变成雷暴。即时情绪：有点害怕但想贴着玩家一起行动，适合短句表达紧张。"
         elif raining:
-            parts_text = "下雨了诶～"
+            parts_text = "开始下雨了。即时情绪：轻微感叹，可以低打扰地吐槽天气。"
         else:
-            parts_text = "雨停了，天晴了！"
+            parts_text = "雨停了，天晴了。即时情绪：放松、开心，可以轻轻感叹一句。"
     elif event_type == "time_phase_change":
         priority = 5
         phase = event_data.get("phase", "")
         if phase == "night":
-            parts_text = "天黑了...有点害怕，要不要回家？"
+            parts_text = "天黑了。即时情绪：有点怕黑但愿意陪玩家，适合短句提醒安全或问要不要回家。"
         elif phase == "day":
-            parts_text = "天亮了！新的一天～"
+            parts_text = "天亮了。即时情绪：安心、重新有精神，适合轻松开启新一天。"
         else:
             parts_text = f"时间变化: {phase}"
     elif event_type == "inventory_change":
@@ -267,7 +277,7 @@ def format_event(event_data, assigned_maid_id):
         if removed:
             parts.append(f"被{player_name_inv}拿走了{', '.join(removed)}")
         if parts:
-            parts_text = "，".join(parts) + "～"
+            parts_text = "，".join(parts) + "。即时情绪：被照顾或被需要，适合一句亲近但不夸张的回应。"
         else:
             return None, None, None  # No actual changes, skip
 
