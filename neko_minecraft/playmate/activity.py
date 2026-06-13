@@ -114,6 +114,14 @@ class PlayerActivityInference:
                 state = self._block_activity_state(item.summary)
                 if state:
                     return state
+            if item.kind == "container_interaction":
+                if now - item.timestamp > 180:
+                    continue
+                return "organizing"
+            if item.kind in ("fishing_start", "item_fished"):
+                if now - item.timestamp > 180:
+                    continue
+                return "fishing"
         return None
 
     def _block_activity_state(self, text):

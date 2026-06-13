@@ -17,13 +17,16 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.ItemFishedEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
@@ -423,6 +426,7 @@ public class GameEventHandler {
 
         // Only snapshot if the player is the maid's owner
         if (maid.getOwner() == null || !maid.getOwner().getUUID().equals(player.getUUID())) return;
+        broadcastContainerInteraction(player, maid, "open", event.getContainer());
 
         Map<Integer, String> snapshot = new HashMap<>();
         ItemStackHandler inv = maid.getMaidInv();
@@ -450,6 +454,7 @@ public class GameEventHandler {
 
         // Only track if the player is the maid's owner
         if (maid.getOwner() == null || !maid.getOwner().getUUID().equals(player.getUUID())) return;
+        broadcastContainerInteraction(player, maid, "close", event.getContainer());
 
         // Take new snapshot
         Map<Integer, String> newSnapshot = new HashMap<>();
@@ -521,6 +526,64 @@ public class GameEventHandler {
         webSocketServer.broadcastEvent(eventData);
     }
 
+    @SubscribeEvent
+    public static void onFishingRodUse(PlayerInteractEvent.RightClickItem event) {
+        if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
+        Player player = event.getEntity();
+        if (player == null || player.level().isClientSide()) return;
+        if (!(event.getItemStack().getItem() instanceof FishingRodItem)) return;
+        EntityMaid maid = trackedOwnerMaid(player);
+        if (maid == null) return;
+
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_FISHING_START);
+        eventData.addProperty("maid_id", maid.getStringUUID());
+        eventData.addProperty("maid_name", maid.getName().getString());
+        eventData.addProperty("player_name", player.getName().getString());
+        eventData.addProperty("x", player.getX());
+        eventData.addProperty("y", player.getY());
+        eventData.addProperty("z", player.getZ());
+        webSocketServer.broadcastEvent(eventData);
+    }
+
+    @SubscribeEvent
+    public static void onItemFished(ItemFishedEvent event) {
+        if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
+        Player player = event.getEntity();
+        if (player == null || player.level().isClientSide()) return;
+        EntityMaid maid = trackedOwnerMaid(player);
+        if (maid == null) return;
+
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_ITEM_FISHED);
+        eventData.addProperty("maid_id", maid.getStringUUID());
+        eventData.addProperty("maid_name", maid.getName().getString());
+        eventData.addProperty("player_name", player.getName().getString());
+        eventData.addProperty("rod_damage", event.getRodDamage());
+        JsonArray drops = new JsonArray();
+        for (ItemStack stack : event.getDrops()) {
+            if (!stack.isEmpty()) {
+                JsonObject item = new JsonObject();
+                item.addProperty("item", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+                item.addProperty("count", stack.getCount());
+                drops.add(item);
+            }
+        }
+        eventData.add("drops", drops);
+        webSocketServer.broadcastEvent(eventData);
+    }
+
+    private static void broadcastContainerInteraction(Player player, EntityMaid maid, String action, AbstractContainerMenu container) {
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_CONTAINER_INTERACTION);
+        eventData.addProperty("maid_id", maid.getStringUUID());
+        eventData.addProperty("maid_name", maid.getName().getString());
+        eventData.addProperty("player_name", player.getName().getString());
+        eventData.addProperty("action", action);
+        eventData.addProperty("container_type", container.getClass().getSimpleName());
+        webSocketServer.broadcastEvent(eventData);
+    }
+
     private static EntityMaid findMaidById(String maidId, net.minecraft.server.MinecraftServer server) {
         try {
             java.util.UUID uuid = java.util.UUID.fromString(maidId);
@@ -537,12 +600,18 @@ public class GameEventHandler {
     }
 
     private static boolean shouldTrackPlayerBlockActivity(Player player) {
-        if (monitoredMaidId.isEmpty() || player.getServer() == null) return false;
-        EntityMaid maid = findMaidById(monitoredMaidId, player.getServer());
-        if (maid == null || maid.getOwner() == null) return false;
-        if (!maid.getOwner().getUUID().equals(player.getUUID())) return false;
-        if (!maid.level().dimension().equals(player.level().dimension())) return false;
+        EntityMaid maid = trackedOwnerMaid(player);
+        if (maid == null) return false;
         return maid.distanceTo(player) <= 64;
+    }
+
+    private static EntityMaid trackedOwnerMaid(Player player) {
+        if (monitoredMaidId.isEmpty() || player == null || player.getServer() == null) return null;
+        EntityMaid maid = findMaidById(monitoredMaidId, player.getServer());
+        if (maid == null || maid.getOwner() == null) return null;
+        if (!maid.getOwner().getUUID().equals(player.getUUID())) return null;
+        if (!maid.level().dimension().equals(player.level().dimension())) return null;
+        return maid;
     }
 
     private static String attackerName(LivingIncomingDamageEvent event) {

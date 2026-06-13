@@ -38,6 +38,9 @@ public final class Protocol {
     public static final String EVENT_BLOCK_ACTIVITY = "block_activity";
     public static final String EVENT_PLAYER_HURT = "player_hurt";
     public static final String EVENT_PLAYER_KILL_ENTITY = "player_kill_entity";
+    public static final String EVENT_CONTAINER_INTERACTION = "container_interaction";
+    public static final String EVENT_FISHING_START = "fishing_start";
+    public static final String EVENT_ITEM_FISHED = "item_fished";
 
     // Chess game events
     public static final String EVENT_CHESS_GAME_START = "chess_game_start";

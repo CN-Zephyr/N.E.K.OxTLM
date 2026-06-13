@@ -146,6 +146,9 @@
 | `weather_change`    | 天气变化                        | `is_raining`, `is_thundering`                     |
 | `time_phase_change` | 昼夜变化                        | `phase`("day"/"night"), `day_time`                |
 | `inventory_change`  | 背包物品变化（开→快照，关→diff，无变化不推送）  | `maid_id`, `player_name`, `added`, `removed`      |
+| `container_interaction` | 女仆主人打开/关闭容器（仅作为整理物品证据） | `maid_id`, `player_name`, `action`, `container_type` |
+| `fishing_start`     | 女仆主人开始使用鱼竿                     | `maid_id`, `player_name`, `x`, `y`, `z`            |
+| `item_fished`       | 女仆主人钓到物品                         | `maid_id`, `player_name`, `drops`, `rod_damage`   |
 | `chat`              | 玩家聊天消息                      | `sender`, `message`                               |
 
 ## 感知系统
@@ -172,6 +175,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | ------- | -------------- | -------------------- |
 | 玩家手持物品  | 物品变化时（2次检测防抖）  | "伙伴手持物品: minecraft:diamond_swordx1" |
 | 附近结构/地标 | 新发现的结构（128格内）  | "附近发现结构: minecraft:village (距离45.0格)" |
+| 容器交互 | 女仆主人打开/关闭容器 | 用于判断玩家可能正在整理物品，不直接打扰 |
+| 钓鱼开始 | 女仆主人使用鱼竿 | 用于判断玩家进入钓鱼/等待节奏 |
 
 ### 陪玩式感知
 
@@ -183,6 +188,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 活动状态推断 | 基于 awareness 数据和短期证据推断玩家大致处于挖矿、地下探索、建家、钓鱼、赶路、整理、刷怪、闲置、战斗、远离等阶段 |
 | 安静陪伴触发 | 玩家稳定处于适合陪伴的状态一段时间后，按场景低频触发一句简短自然的陪玩回应 |
 | 短期共同目标 | 当前会话内维护“正在一起做什么”，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
+| 陪玩调试日志 | 可选记录事件路由、活动变化、quiet/suggestion/push 触发原因到插件 `log` 目录，便于实测调参 |
 | 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
 | 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |
 
@@ -207,6 +213,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | `playmate_throttle_window` | `30` | push 节流统计窗口，单位秒 |
 | `playmate_throttle_limit` | `6` | 节流窗口内允许的 push 次数 |
 | `playmate_suggestion_cooldown` | `600` | 轻量主动建议冷却时间，单位秒 |
+| `playmate_debug_log_enabled` | `false` | 是否启用陪玩调试日志 |
+| `playmate_debug_log_max_bytes` | `262144` | `log/playmate_debug.log` 最大大小，超出后保留尾部内容 |
 
 ## 游戏内指令
 

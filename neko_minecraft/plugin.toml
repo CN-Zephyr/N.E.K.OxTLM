@@ -77,3 +77,5 @@ playmate_throttle_limit = 6
 playmate_minigame_feedback_cooldown = 90
 playmate_minigame_context_chars = 90
 playmate_suggestion_cooldown = 600
+playmate_debug_log_enabled = false
+playmate_debug_log_max_bytes = 262144

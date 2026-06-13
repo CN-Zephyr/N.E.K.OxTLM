@@ -49,6 +49,7 @@ class PlaymateContextManager:
         update = self.activity.observe(awareness_data, self.memory)
         if update:
             self._plugin.logger.info(f"[Playmate] Activity changed: {update.state} ({update.label})")
+            self._plugin._playmate_debug.record("activity", state=update.state, label=update.label, text=update.text)
             self.memory.remember("activity", update.text, priority=1)
             summary = self.memory.format_summary(
                 limit=self._plugin._playmate_memory_inject_items,
@@ -77,6 +78,7 @@ class PlaymateContextManager:
         )
         if quiet_text:
             self._plugin.logger.info(f"[Playmate] Quiet companion triggered: {self.activity.stable_label}")
+            self._plugin._playmate_debug.record("quiet", state=stable_state, label=self.activity.stable_label, text=quiet_text[:160])
             self.memory.remember("quiet", quiet_text, priority=1)
             summary = self.memory.format_summary(
                 limit=self._plugin._playmate_memory_inject_items,
@@ -96,6 +98,7 @@ class PlaymateContextManager:
             self._plugin.logger.info(f"[Playmate] Proactive suggestion triggered: {stable_state}")
             suggestion_text = suggestion.get("text", "")
             should_respond = bool(suggestion.get("respond"))
+            self._plugin._playmate_debug.record("suggestion", state=stable_state, respond=should_respond, text=suggestion_text[:160])
             self.memory.remember("suggestion", suggestion_text, priority=1)
             summary = self.memory.format_summary(
                 limit=self._plugin._playmate_memory_inject_items,

@@ -20,6 +20,7 @@ class MinecraftPushRouter:
             aggregate = ai_behavior == "read" and priority <= 2
         if aggregate:
             self._pending_low.append((time.time(), text, priority, metadata or {}))
+            self._plugin._playmate_debug.record("push", route="aggregate_pending", ai_behavior=ai_behavior, priority=priority, pending=len(self._pending_low), text=str(text)[:160])
             if self._aggregate_window <= 0:
                 await self._flush_pending()
                 return
@@ -51,6 +52,7 @@ class MinecraftPushRouter:
         now = time.time()
         self._trim_push_times(now, self._throttle_window)
         if not ignore_throttle and len(self._push_times) >= self._throttle_limit:
+            self._plugin._playmate_debug.record("push", route="throttled", pending=len(self._pending_low), recent_push_count=len(self._push_times))
             if self._flush_task is None or self._flush_task.done() or self._flush_task is asyncio.current_task():
                 self._flush_task = asyncio.create_task(self._delayed_flush())
             return
@@ -68,6 +70,7 @@ class MinecraftPushRouter:
 
     def _direct_push(self, text, ai_behavior="read", priority=1, metadata=None):
         self._push_times.append(time.time())
+        self._plugin._playmate_debug.record("push", route="direct", ai_behavior=ai_behavior, priority=priority, text=str(text)[:160])
         self._plugin.push_message(
             source="minecraft",
             ai_behavior=ai_behavior,

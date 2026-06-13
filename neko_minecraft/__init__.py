@@ -17,6 +17,7 @@ from . import events as _events
 from .awareness import AwarenessManager
 from . import tools as _tools
 from .playmate import PlaymateContextManager, MinecraftPushRouter
+from .playmate.debug_log import PlaymateDebugLogger
 
 from .tool_defs import (
     MC_MAID_STATUS, MC_SWITCH_FOLLOW, MC_SWITCH_SIT,
@@ -60,6 +61,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._playmate_minigame_feedback_cooldown = 90
         self._playmate_minigame_context_chars = 90
         self._playmate_suggestion_cooldown = 600
+        self._playmate_debug_log_enabled = False
+        self._playmate_debug_log_max_bytes = 262144
+        self._playmate_debug = PlaymateDebugLogger(self)
         self._minecraft_push = MinecraftPushRouter(self)
         self._playmate = PlaymateContextManager(self)
         self._awareness = AwarenessManager(self)
@@ -209,6 +213,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             sender = chat_data.get("sender", "unknown")
             message = chat_data.get("message", "")
             text = f"{sender}说了: {message}"
+            self._playmate_debug.record("chat_message", sender=sender, message=message, route="respond", priority=7)
             self._playmate.remember_event("chat", text, priority=7)
             await self._push_minecraft_context(
                 text,
@@ -229,6 +234,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         if parts_text is None:
             return
         event_type = event_data.get("event_type", "event")
+        debug_base = {"event_type": event_type, "priority": priority, "text": parts_text[:160]}
         if side_effects:
             if "pending_revenge" in side_effects:
                 self._awareness._pending_revenge = side_effects["pending_revenge"]
@@ -236,6 +242,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 self._awareness._was_dead = side_effects["was_dead"]
             if side_effects.get("evidence_only"):
                 self._playmate.remember_event(event_type, parts_text, priority=priority)
+                self._playmate_debug.record("event", **debug_base, route="evidence_only")
                 self.logger.info(f"[Playmate] Evidence event stored: {event_type}, text={parts_text[:80]}")
                 return
 
@@ -257,9 +264,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
             )
 
             if not context_text:
+                self._playmate_debug.record("event", **debug_base, route="minigame_suppressed")
                 return
 
             ai_behavior = side_effects.get("ai_behavior", "read")
+            self._playmate_debug.record("event", **debug_base, route="minigame", ai_behavior=ai_behavior, context_text=context_text[:160])
             await self._push_minecraft_context(
                 context_text,
                 ai_behavior=ai_behavior,
@@ -269,6 +278,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return
 
         self._playmate.remember_event(event_type, parts_text, priority=priority)
+        self._playmate_debug.record("event", **debug_base, route="respond", ai_behavior="respond")
 
         await self._push_minecraft_context(
             parts_text,

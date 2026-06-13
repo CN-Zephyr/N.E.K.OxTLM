@@ -101,6 +101,8 @@ def _load_playmate_config(plugin, config):
     plugin._playmate_minigame_feedback_cooldown = config.get("playmate_minigame_feedback_cooldown", plugin._playmate_minigame_feedback_cooldown)
     plugin._playmate_minigame_context_chars = config.get("playmate_minigame_context_chars", plugin._playmate_minigame_context_chars)
     plugin._playmate_suggestion_cooldown = config.get("playmate_suggestion_cooldown", plugin._playmate_suggestion_cooldown)
+    plugin._playmate_debug_log_enabled = config.get("playmate_debug_log_enabled", plugin._playmate_debug_log_enabled)
+    plugin._playmate_debug_log_max_bytes = config.get("playmate_debug_log_max_bytes", plugin._playmate_debug_log_max_bytes)
 
 
 def save_config(plugin):

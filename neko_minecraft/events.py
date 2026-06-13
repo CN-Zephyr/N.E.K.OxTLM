@@ -306,6 +306,32 @@ def format_event(event_data, assigned_maid_id):
         parts_text = f"{player_name_block}刚刚连续{verb}了{count}个方块，主要是{block_detail}，倾向于{tendency_text}。"
         side_effects["evidence_only"] = True
 
+    elif event_type == "container_interaction":
+        priority = 2
+        player_name_container = event_data.get("player_name", "伙伴")
+        action = event_data.get("action", "")
+        container_type = event_data.get("container_type", "容器")
+        action_text = "打开" if action == "open" else "关闭" if action == "close" else "操作"
+        parts_text = f"{player_name_container}{action_text}了{container_type}，像是在整理物品或查看库存。"
+        side_effects["evidence_only"] = True
+
+    elif event_type == "fishing_start":
+        priority = 2
+        player_name_fishing = event_data.get("player_name", "伙伴")
+        parts_text = f"{player_name_fishing}开始钓鱼了，适合作为低打扰陪等素材。"
+        side_effects["evidence_only"] = True
+
+    elif event_type == "item_fished":
+        priority = 4
+        player_name_fished = event_data.get("player_name", "伙伴")
+        drops = event_data.get("drops", []) or []
+        drop_parts = []
+        for item in drops[:3]:
+            if isinstance(item, dict):
+                drop_parts.append(f"{item.get('item', '')}x{item.get('count', 1)}")
+        drop_text = "、".join(drop_parts) or "东西"
+        parts_text = f"{player_name_fished}钓到了{drop_text}。即时情绪：轻松、开心，适合一句像陪玩一样的小反应。"
+
     # ── 棋局事件 ──
     elif event_type == "chess_game_start":
         game_type = event_data.get("game_type", "unknown")
