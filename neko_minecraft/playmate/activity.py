@@ -187,7 +187,6 @@ class PlayerActivityInference:
             "mining": "挖矿",
             "underground_exploring": "地下探索",
             "gathering": "采集整理",
-            "building": "建造/整理",
             "base_building": "建家/布置",
             "danger_exploring": "危险探索",
             "organizing": "整理物品",

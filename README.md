@@ -4,18 +4,51 @@
 
 > 新手上路？请阅读 [使用教程](使用教程.md)
 
+## 架构流程
+
+```mermaid
+graph LR
+    subgraph Minecraft Mod 端
+        A[游戏事件监听] --> B[GameEventHandler]
+        C[Awareness 数据] --> D[GameContextHandler]
+        B --> E[WebSocket 服务器<br>127.0.0.1:48920]
+        D --> E
+        E --> F[MessageRouter<br>消息路由分发]
+        F --> G[各 Handler 处理]
+    end
+
+    subgraph N.E.K.O 插件端
+        H[WSBridge<br>WebSocket 客户端] --> I[消息轮询]
+        E <--> H
+        I --> J[事件格式化]
+        I --> K[感知系统]
+        I --> L[陪玩系统]
+        K --> L
+        J --> M[Push 路由<br>聚合/节流]
+        L --> M
+        M --> N[N.E.K.O LLM]
+        N --> O[10 个 LLM 工具]
+        O --> H
+    end
+
+    style E fill:#4a9eff,color:#fff
+    style H fill:#4a9eff,color:#fff
+    style N fill:#ff6b6b,color:#fff
+    style L fill:#51cf66,color:#fff
+```
+
 ## 功能特性
 
 - **伙伴型 AI 女仆** — 女仆不再是仆从，而是陪你一起玩的伙伴。会害怕、会撒娇、会吐槽、会关心你
 - **WebSocket 桥接** — 在 Minecraft 服务端启动 WebSocket 服务器，N.E.K.O 客户端通过 WebSocket 协议实时交互
 - **女仆状态查询** — 获取所有女仆的生命值、位置、任务、装备等详细信息
 - **女仆行为控制** — 通过自然语言指令控制女仆的跟随/停留、坐下/站起、切换任务、切换日程、装备物品等
-- **游戏事件推送** — 将女仆受伤/死亡、玩家死亡、天气变化、昼夜变化、群系切换、成就解锁、背包物品变化等事件实时推送给 N.E.K.O
-- **定时感知系统** — 每5秒轮询游戏状态，检测玩家血量/着火/溺水、附近敌对生物、矿洞暗处、食物分享等，主动关心或提醒
-- **陪玩式感知增强** — 记录最近共同经历，推断玩家当前活动状态，并在长时间稳定游玩时低频主动陪一句
+- **游戏事件推送** — 将女仆受伤/死亡、玩家受伤/死亡/击杀、天气变化、昼夜变化、群系切换、成就解锁、背包物品变化、方块活动、容器交互、钓鱼、棋局等事件实时推送给 N.E.K.O
+- **定时感知系统** — 每 5 秒轮询游戏状态，检测玩家血量/着火/溺水、附近敌对生物、矿洞暗处、食物分享等，主动关心或提醒
+- **陪玩式感知增强** — 记录最近共同经历，推断玩家当前活动状态，并在长时间稳定游玩时低频主动陪一句；主动建议与小游戏陪伴
 - **上下文注入** — 持续更新玩家手持物品、附近结构/地标等信息到 LLM 上下文，为主动搭话提供素材
 - **Push 聚合与节流** — 低优先级上下文会短窗口合并后按时间顺序注入，紧急提醒和聊天消息仍会立即响应
-- **女仆聊天** — 让女仆在游戏内发送聊天消息并显示聊天气泡（TTS 由 N.E.K.O 处理，避免重复）(llm自主判断)
+- **女仆聊天** — 让女仆在游戏内发送聊天消息并显示聊天气泡（TTS 由 N.E.K.O 处理，避免重复，LLM 自主判断）
 - **技能系统** — 查询和使用车万女仆的 AI 技能（Skill）
 - **指令执行（需确认）** — N.E.K.O 可请求执行 Minecraft 指令，但需要玩家在游戏内点击确认，防止滥用
 
@@ -39,6 +72,8 @@
 
 在游戏内通过 Mod 菜单或配置文件 `neko_tlm_bridge-common.toml` 进行配置：
 
+### 桥接配置
+
 | 配置项                       | 默认值     | 说明                                         |
 | ------------------------- | ------- | ------------------------------------------ |
 | `nekoModeEnabled`         | `true`  | 启用 N.E.K.O 模式，开启后女仆的 AI 对话由 N.E.K.O 驱动     |
@@ -46,8 +81,20 @@
 | `ignoreTlmBuiltinContext` | `true`  | 忽略车万女仆内置 AI 上下文，防止与 N.E.K.O 冲突             |
 | `eventPushEnabled`        | `true`  | 启用游戏事件推送，将游戏事件通过 WebSocket 推送给 N.E.K.O     |
 | `commandExecutionEnabled` | `false` | 启用指令执行，允许 N.E.K.O 请求执行 Minecraft 指令（需玩家确认） |
+| `chatBubbleEnabled`       | `true`  | 启用聊天气泡显示                                   |
+| `chatBoxEnabled`          | `true`  | 启用聊天框消息显示                                  |
 | `weatherEventEnabled`     | `true`  | 启用天气变化事件推送                                 |
 | `timeEventEnabled`        | `true`  | 启用昼夜变化事件推送                                 |
+
+### 行为与方块活动聚合配置
+
+| 配置项                       | 默认值     | 说明                                         |
+| ------------------------- | ------- | ------------------------------------------ |
+| `behaviorAggregateIdleTicks`    | `80`    | 受伤/击杀行为聚合空闲 tick 阈值（超出后自动刷出） |
+| `behaviorAggregateMaxWindowTicks` | `160` | 受伤/击杀行为聚合最大窗口 tick           |
+| `blockActivityIdleTicks`  | `60`    | 方块活动聚合空闲 tick 阈值             |
+| `blockActivityMaxWindowTicks` | `400` | 方块活动聚合最大窗口 tick             |
+| `blockActivityMinCount`   | `4`     | 方块活动聚合最少方块数阈值                |
 
 ## WebSocket 协议
 
@@ -128,6 +175,7 @@
 | `attack_target_result`     | 攻击目标设置结果（实验性，未暴露给LLM） |
 | `command_execution_result` | Minecraft 指令执行结果 |
 | `config`                   | 当前配置             |
+| `config_update`            | 配置变更推送           |
 | `event`                    | 游戏事件推送           |
 | `chat_message`             | 聊天消息推送           |
 | `error`                    | 错误信息             |
@@ -140,15 +188,21 @@
 | ------------------- | --------------------------- | ------------------------------------------------- |
 | `maid_hurt`         | 女仆受伤                        | `maid_id`, `maid_name`, `damage`, `source`        |
 | `maid_death`        | 女仆死亡                        | `maid_id`, `maid_name`, `killer`(可选), `cause`    |
+| `player_hurt`       | 玩家受伤（行为聚合统计）                | `player_name`, `count`, `total_damage`, `primary_target`, `last_attacker`, `includes_maid`, `last_health`, `last_max_health` |
+| `player_kill_entity`| 玩家击杀实体（行为聚合统计）              | `player_name`, `count`, `primary_target`, `last_target` |
 | `player_death`      | 玩家死亡                        | `player_name`, `cause`                            |
 | `advancement`       | 玩家解锁成就（仅含有 toast 的成就）       | `player_name`, `title`, `description`             |
 | `biome_change`      | 群系切换（10秒防抖，避免边界反复触发）        | `maid_id`, `maid_name`, `biome`, `old_biome`      |
 | `weather_change`    | 天气变化                        | `is_raining`, `is_thundering`                     |
 | `time_phase_change` | 昼夜变化                        | `phase`("day"/"night"), `day_time`                |
 | `inventory_change`  | 背包物品变化（开→快照，关→diff，无变化不推送）  | `maid_id`, `player_name`, `added`, `removed`      |
+| `block_activity`    | 方块活动聚合（破坏/放置同一批方块合并推送）      | `player_name`, `action`, `count`, `primary_block`, `tendency`, `top_blocks` |
 | `container_interaction` | 女仆主人打开/关闭容器（仅作为整理物品证据） | `maid_id`, `player_name`, `action`, `container_type` |
 | `fishing_start`     | 女仆主人开始使用鱼竿                     | `maid_id`, `player_name`, `x`, `y`, `z`            |
 | `item_fished`       | 女仆主人钓到物品                         | `maid_id`, `player_name`, `drops`, `rod_damage`   |
+| `chess_game_start`  | 棋局开始（五子棋/国际象棋/中国象棋）         | `game_type`, `opponent`                           |
+| `chess_mid_game`    | 棋局中盘                         | `game_type`, `move_count`, `is_maid_turn`, `board`/`fen` |
+| `chess_game_end`    | 棋局结束                         | `game_type`, `result`("win"/"lose"/"draw"), `opponent`, `move_count` |
 | `chat`              | 玩家聊天消息                      | `sender`, `message`                               |
 
 ## 感知系统
@@ -175,8 +229,9 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | ------- | -------------- | -------------------- |
 | 玩家手持物品  | 物品变化时（2次检测防抖）  | "伙伴手持物品: minecraft:diamond_swordx1" |
 | 附近结构/地标 | 新发现的结构（128格内）  | "附近发现结构: minecraft:village (距离45.0格)" |
-| 容器交互 | 女仆主人打开/关闭容器 | 用于判断玩家可能正在整理物品，不直接打扰 |
-| 钓鱼开始 | 女仆主人使用鱼竿 | 用于判断玩家进入钓鱼/等待节奏 |
+| 女仆背包变化  | 背包物品列表变化时      | "女仆背包状态已更新，共N件物品" |
+| 容器交互    | 女仆主人打开/关闭容器    | 用于判断玩家可能正在整理物品，不直接打扰 |
+| 钓鱼开始    | 女仆主人使用鱼竿       | 用于判断玩家进入钓鱼/等待节奏 |
 
 ### 陪玩式感知
 
@@ -185,22 +240,35 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 能力 | 说明 |
 | ---- | ---- |
 | 短期共同经历 | 记录最近 Minecraft 事件、聊天、感知变化和活动变化，按时间顺序整理成摘要 |
-| 活动状态推断 | 基于 awareness 数据和短期证据推断玩家大致处于挖矿、地下探索、建家、钓鱼、赶路、整理、刷怪、闲置、战斗、远离等阶段 |
+| 活动状态推断 | 基于 awareness 数据和短期证据推断玩家大致处于挖矿、地下探索、建家、危险探索、钓鱼、赶路、采集整理、整理物品、刷怪、闲置、战斗、远离等阶段 |
 | 安静陪伴触发 | 玩家稳定处于适合陪伴的状态一段时间后，按场景低频触发一句简短自然的陪玩回应 |
-| 短期共同目标 | 当前会话内维护“正在一起做什么”，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
+| 主动建议触发 | 根据场景（暗处缺火把、挖矿缺光、建造有材料、钓鱼/赶路/整理/刷怪等）生成一句话建议 |
+| 小游戏陪伴 | 棋局事件（五子棋/国际象棋/中国象棋）特殊处理，含冷却和上下文裁剪 |
+| 短期共同目标 | 当前会话内维护"正在一起做什么"，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
 | 陪玩调试日志 | 可选记录事件路由、活动变化、quiet/suggestion/push 触发原因到插件 `log` 目录，便于实测调参 |
 | 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
 | 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |
 
-当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、战斗中、玩家远离、整理物品和刷怪收尾时不会触发安静陪伴，避免乱报和打扰。
+当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、危险探索 `danger_exploring`、战斗中 `combat`、采集整理 `gathering`、整理物品 `organizing`、刷怪收尾 `mob_farming`、玩家远离 `away` 时不会触发安静陪伴，避免乱报和打扰。
 
 ### N.E.K.O 插件侧配置
 
 以下配置位于 `neko_minecraft/plugin.toml` 的 `[minecraft_bridge]` 段：
 
+#### 连接配置
+
 | 配置项 | 默认值 | 说明 |
 | ------ | ------ | ---- |
+| `ws_url` | `ws://127.0.0.1:48920` | WebSocket 连接地址 |
+| `heartbeat_interval` | `30` | 心跳间隔，单位秒 |
+| `reconnect_interval` | `5` | 断线重连间隔，单位秒 |
+| `max_reconnect_interval` | `60` | 最大重连间隔，单位秒 |
 | `awareness_interval` | `5` | awareness 轮询间隔，单位秒 |
+
+#### 陪玩系统配置
+
+| 配置项 | 默认值 | 说明 |
+| ------ | ------ | ---- |
 | `playmate_memory_items` | `24` | 短期共同经历最多保存条数 |
 | `playmate_memory_summary_length` | `120` | 单条短期记忆摘要最大长度 |
 | `playmate_memory_inject_items` | `8` | 注入共同经历时最多使用条数 |
@@ -212,6 +280,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | `playmate_aggregate_window` | `8` | 低优先级上下文聚合窗口，单位秒 |
 | `playmate_throttle_window` | `30` | push 节流统计窗口，单位秒 |
 | `playmate_throttle_limit` | `6` | 节流窗口内允许的 push 次数 |
+| `playmate_minigame_feedback_cooldown` | `90` | 小游戏（棋局）中盘反馈冷却时间，单位秒 |
+| `playmate_minigame_context_chars` | `90` | 小游戏陪伴上下文最大字符数 |
 | `playmate_suggestion_cooldown` | `600` | 轻量主动建议冷却时间，单位秒 |
 | `playmate_debug_log_enabled` | `false` | 是否启用陪玩调试日志 |
 | `playmate_debug_log_max_bytes` | `262144` | `log/playmate_debug.log` 最大大小，超出后保留尾部内容 |
@@ -230,14 +300,14 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 ### Minecraft Mod 端（Java/NeoForge）
 
 ```
-src/main/java/com/neko_tlm_bridge/
+minecraft-mod/src/main/java/com/neko_tlm_bridge/
 ├── NekoTlmBridge.java          # 模组主类，生命周期管理与 handler 初始化
 ├── client/
 │   └── NekoConfigScreen.java   # 配置界面
 ├── config/
 │   └── ModConfig.java          # 配置定义
 ├── event/
-│   └── GameEventHandler.java   # 游戏事件监听与推送（死亡/天气/昼夜/群系/背包/成就）
+│   └── GameEventHandler.java   # 游戏事件监听与推送（受伤/死亡/天气/昼夜/群系/背包/成就/方块/钓鱼/棋局）
 ├── tlm/
 │   ├── LittleMaidCompat.java       # 车万女仆 API 扩展注册
 │   ├── NekoBridgeTool.java         # AI 工具：消息转发到 N.E.K.O
@@ -259,7 +329,7 @@ src/main/java/com/neko_tlm_bridge/
         ├── ChatHandler.java             # 聊天消息发送
         ├── CommandExecutionHandler.java  # 服务器命令执行（需玩家确认）
         ├── AttackTargetHandler.java     # 攻击目标管理
-        ├── SkillHandler.java            # 技能查询
+        ├── SkillHandler.java            # 技能查询与使用
         ├── ConfigHandler.java           # 配置查询与监控女仆设置
         └── MaidHelper.java              # 女仆查找共享工具方法
 ```
@@ -271,17 +341,20 @@ neko_minecraft/
 ├── __init__.py          # 插件主类：生命周期、消息分发、@llm_tool 声明、UI
 ├── instructions.py      # AI 指令模板（注入到 LLM 上下文的系统提示词）
 ├── task_resolver.py     # 任务名解析与模糊匹配（中文同义词 → TLM 任务 ID）
-├── bridge.py            # WebSocket 桥接层（连接、重连、心跳、收发队列）
+├── bridge.py            # WebSocket 桥接层（连接、重连、心跳、收发队列、MC进程检测）
 ├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
-├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级）
+├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级 + 棋局局面描述）
 ├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
-├── playmate/            # 陪玩式感知增强（短期记忆、活动推断、安静陪伴、push 聚合）
+├── playmate/            # 陪玩式感知增强
 │   ├── __init__.py      # 子包导出入口
 │   ├── context.py       # 陪玩上下文总协调器
 │   ├── memory.py        # 短期共同经历记忆
-│   ├── activity.py      # 玩家活动状态推断
+│   ├── activity.py      # 玩家活动状态推断（14种状态分类）
 │   ├── quiet.py         # 安静陪伴触发器
-│   └── push.py          # Minecraft 上下文 push 聚合与节流
+│   ├── suggestion.py    # 主动建议触发器（场景化轻量建议）
+│   ├── minigame.py      # 小游戏陪伴（棋局事件处理/冷却/上下文裁剪）
+│   ├── push.py          # Minecraft 上下文 push 聚合与节流
+│   └── debug_log.py     # 陪玩调试日志
 ├── tools.py             # LLM 工具业务逻辑（10个 do_* 函数）
 ├── tool_defs.py         # LLM 工具元数据常量（name/description/parameters）
 ├── config.json          # 默认配置
@@ -308,4 +381,4 @@ MIT License
 ## 致谢
 
 - [车万女仆 (Touhou Little Maid)](https://github.com/TartaricAcid/TouhouLittleMaid) — 提供了优秀的女仆系统与 AI 扩展 API
-- [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) — 自然语言 AI 控制框架，很好用的猫娘👍👍👍
+- [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) — 自然语言 AI 控制框架，很好用的猫娘
