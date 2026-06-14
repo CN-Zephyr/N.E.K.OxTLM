@@ -13,6 +13,7 @@ class AwarenessManager:
         self._last_low_health_warn_time = 0
         self._last_fire_warn_time = 0
         self._last_drown_warn_time = 0
+        self._last_hunger_warn_time = 0
         self._last_hostile_warn_time = 0
         self._pending_revenge = None
         self._was_dead = False
@@ -105,12 +106,14 @@ class AwarenessManager:
                 "player_max_health": data.get("player_max_health", 20),
                 "player_on_fire": data.get("player_on_fire", False),
                 "player_is_drowning": data.get("player_is_drowning", False),
+                "player_food_level": data.get("player_food_level", 20),
                 "light_level": data.get("light_level", 15),
                 "is_underground": data.get("is_underground", False),
                 "maid_inventory": [],
                 "player_held_item": data.get("player_held_item", ""),
                 "player_held_item_count": data.get("player_held_item_count", 0),
                 "nearby_structures": [],
+                "player_dimension": data.get("player_dimension", "minecraft:overworld"),
                 "maid_player_distance": data.get("maid_player_distance", None),
             }
 
@@ -202,6 +205,17 @@ class AwarenessManager:
             if new_state["player_is_drowning"] and now - self._last_drown_warn_time > 120:
                 self._last_drown_warn_time = now
                 changes.append({"text": "玩家在溺水！提醒快上岸！", "urgent": True})
+
+            # === 2.5. Player hunger warning ===
+            player_food = new_state.get("player_food_level", 20)
+            if player_food <= 6 and now - self._last_hunger_warn_time > 300:
+                self._last_hunger_warn_time = now
+                changes.append({"text": "玩家快饿死了！提醒赶紧吃东西！", "urgent": True})
+            elif player_food <= 12 and now - self._last_hunger_warn_time > 600:
+                close_hostile = any(h.get("distance", 999) < 12 for h in new_state.get("nearby_hostiles", []))
+                if close_hostile or new_state.get("player_on_fire") or new_state.get("player_is_drowning"):
+                    self._last_hunger_warn_time = now
+                    changes.append({"text": "玩家饥饿值偏低，而且还在危险中，提醒注意补给！", "urgent": False})
 
             # === 3. Maid inventory context ===
             new_inventory = new_state["maid_inventory"]

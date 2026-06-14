@@ -33,6 +33,14 @@ public class NekoCommand {
                                         ctx.getSource(),
                                         StringArgumentType.getString(ctx, "pending_id")
                                 ))))
+                .then(Commands.literal("plan")
+                        .then(Commands.literal("clear")
+                                .executes(ctx -> clearPlanCommand(ctx.getSource())))
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                                .executes(ctx -> setPlanCommand(
+                                        ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "text")
+                                ))))
         );
     }
 
@@ -110,6 +118,28 @@ public class NekoCommand {
 
         LOGGER.info("Player {} rejected command: {} (pending_id={})", source.getTextName(), pending.command, pendingId);
         return 0;
+    }
+
+    private static int setPlanCommand(CommandSourceStack source, String text) {
+        com.neko_tlm_bridge.client.PlanOverlayRenderer.setPlan(text);
+        source.sendSuccess(() -> Component.literal("Plan set: " + text), true);
+
+        NekoWebSocketServer wsServer = NekoWebSocketServerHolder.getServer();
+        if (wsServer != null) {
+            wsServer.broadcastPlanUpdate(text);
+        }
+        return 1;
+    }
+
+    private static int clearPlanCommand(CommandSourceStack source) {
+        com.neko_tlm_bridge.client.PlanOverlayRenderer.clearPlan();
+        source.sendSuccess(() -> Component.literal("Plan cleared"), true);
+
+        NekoWebSocketServer wsServer = NekoWebSocketServerHolder.getServer();
+        if (wsServer != null) {
+            wsServer.broadcastPlanUpdate("");
+        }
+        return 1;
     }
 
     public static void broadcastCommandRequest(MinecraftServer server, String pendingId, String command) {

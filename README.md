@@ -27,7 +27,7 @@ graph LR
         J --> M[Push 路由<br>聚合/节流]
         L --> M
         M --> N[N.E.K.O LLM]
-        N --> O[10 个 LLM 工具]
+        N --> O[11 个 LLM 工具]
         O --> H
     end
 
@@ -43,14 +43,15 @@ graph LR
 - **WebSocket 桥接** — 在 Minecraft 服务端启动 WebSocket 服务器，N.E.K.O 客户端通过 WebSocket 协议实时交互
 - **女仆状态查询** — 获取所有女仆的生命值、位置、任务、装备等详细信息
 - **女仆行为控制** — 通过自然语言指令控制女仆的跟随/停留、坐下/站起、切换任务、切换日程、装备物品等
-- **游戏事件推送** — 将女仆受伤/死亡、玩家受伤/死亡/击杀、天气变化、昼夜变化、群系切换、成就解锁、背包物品变化、方块活动、容器交互、钓鱼、棋局等事件实时推送给 N.E.K.O
-- **定时感知系统** — 每 5 秒轮询游戏状态，检测玩家血量/着火/溺水、附近敌对生物、矿洞暗处、食物分享等，主动关心或提醒
+- **游戏事件推送** — 将女仆受伤/死亡、玩家受伤/死亡/击杀、天气变化、昼夜变化、群系切换、维度切换、成就解锁、背包物品变化、方块活动、容器交互、钓鱼、棋局等事件实时推送给 N.E.K.O
+- **定时感知系统** — 每 5 秒轮询游戏状态，检测玩家血量/饥饿/着火/溺水、附近敌对生物、矿洞暗处、食物分享等，主动关心或提醒
 - **陪玩式感知增强** — 记录最近共同经历，推断玩家当前活动状态，并在长时间稳定游玩时低频主动陪一句；主动建议与小游戏陪伴
 - **上下文注入** — 持续更新玩家手持物品、附近结构/地标等信息到 LLM 上下文，为主动搭话提供素材
 - **Push 聚合与节流** — 低优先级上下文会短窗口合并后按时间顺序注入，紧急提醒和聊天消息仍会立即响应
 - **女仆聊天** — 让女仆在游戏内发送聊天消息并显示聊天气泡（TTS 由 N.E.K.O 处理，避免重复，LLM 自主判断）
 - **技能系统** — 查询和使用车万女仆的 AI 技能（Skill）
 - **指令执行（需确认）** — N.E.K.O 可请求执行 Minecraft 指令，但需要玩家在游戏内点击确认，防止滥用
+- **游戏内计划显示** — 在 Minecraft 右上角 HUD 显示当前计划，支持 LLM 下发和玩家输入（`/neko plan`）
 
 ## 环境要求
 
@@ -126,6 +127,7 @@ graph LR
 | `execute_command`  | 请求执行 Minecraft 指令 | `command`                                           |
 | `get_config`       | 获取当前配置            | 无                                                   |
 | `set_monitored_maid` | 设置监控的女仆ID（用于背包物品变化检测） | `maid_id`                           |
+| `set_plan`         | 设置游戏内 HUD 计划文本  | `plan`（空字符串清除）                                  |
 
 #### command\_maid 支持的指令
 
@@ -176,6 +178,8 @@ graph LR
 | `command_execution_result` | Minecraft 指令执行结果 |
 | `config`                   | 当前配置             |
 | `config_update`            | 配置变更推送           |
+| `plan_update`              | 计划变更推送（玩家通过命令设置时） |
+| `plan_result`              | 计划设置结果           |
 | `event`                    | 游戏事件推送           |
 | `chat_message`             | 聊天消息推送           |
 | `error`                    | 错误信息             |
@@ -203,6 +207,7 @@ graph LR
 | `chess_game_start`  | 棋局开始（五子棋/国际象棋/中国象棋）         | `game_type`, `opponent`                           |
 | `chess_mid_game`    | 棋局中盘                         | `game_type`, `move_count`, `is_maid_turn`, `board`/`fen` |
 | `chess_game_end`    | 棋局结束                         | `game_type`, `result`("win"/"lose"/"draw"), `opponent`, `move_count` |
+| `dimension_change`  | 玩家维度切换                       | `player_name`, `from_dimension`, `to_dimension` |
 | `chat`              | 玩家聊天消息                      | `sender`, `message`                               |
 
 ## 感知系统
@@ -217,6 +222,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 低血量警告     | 玩家血量 < 30%      | 5分钟  | "你血量好低！要小心啊！"         |
 | 着火警告      | 玩家着火            | 2分钟  | "着火了！快灭火！"             |
 | 溺水警告      | 玩家溺水            | 2分钟  | "快上岸！要淹到了！"            |
+| 饥饿警告      | 玩家饥饿值 ≤ 6      | 5分钟  | "快饿死了！赶紧吃东西！"         |
+| 饥饿提醒      | 饥饿值 ≤ 12 且有危险   | 10分钟 | "饥饿值偏低，还在危险中，注意补给！" |
 | 近处敌对生物    | 新敌对生物 < 10格     | 3分钟  | "危险！附近有苦力怕x2！"        |
 | 食物分享      | 有食物 + 玩家血量 < 70% | 5分钟  | "你饿不饿？我这里有点吃的～"       |
 | 矿洞暗处      | 地下 + 亮度 < 7     | 10分钟 | "这里好暗...要不要我帮忙插火把？"   |
@@ -240,16 +247,17 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 能力 | 说明 |
 | ---- | ---- |
 | 短期共同经历 | 记录最近 Minecraft 事件、聊天、感知变化和活动变化，按时间顺序整理成摘要 |
-| 活动状态推断 | 基于 awareness 数据和短期证据推断玩家大致处于挖矿、地下探索、建家、危险探索、钓鱼、赶路、采集整理、整理物品、刷怪、闲置、战斗、远离等阶段 |
+| 活动状态推断 | 基于 awareness 数据和短期证据推断玩家大致处于挖矿、地下探索、建家、危险探索、钓鱼、赶路、采集整理、整理物品、刷怪、闲置、战斗、远离、红石工程、下界探索、末地探索、村民交易等阶段 |
 | 安静陪伴触发 | 玩家稳定处于适合陪伴的状态一段时间后，按场景低频触发一句简短自然的陪玩回应 |
 | 主动建议触发 | 根据场景（暗处缺火把、挖矿缺光、建造有材料、钓鱼/赶路/整理/刷怪等）生成一句话建议 |
 | 小游戏陪伴 | 棋局事件（五子棋/国际象棋/中国象棋）特殊处理，含冷却和上下文裁剪 |
 | 短期共同目标 | 当前会话内维护"正在一起做什么"，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
+| 游戏内计划显示 | 在 Minecraft 右上角 HUD 显示当前计划，可由 LLM 通过 `mc_set_plan` 工具下发，也可由玩家通过 `/neko plan` 命令设置 |
 | 陪玩调试日志 | 可选记录事件路由、活动变化、quiet/suggestion/push 触发原因到插件 `log` 目录，便于实测调参 |
 | 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
 | 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |
 
-当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、危险探索 `danger_exploring`、战斗中 `combat`、采集整理 `gathering`、整理物品 `organizing`、刷怪收尾 `mob_farming`、玩家远离 `away` 时不会触发安静陪伴，避免乱报和打扰。
+当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、危险探索 `danger_exploring`、战斗中 `combat`、采集整理 `gathering`、整理物品 `organizing`、村民交易 `trading`、玩家远离 `away` 时不会触发安静陪伴，避免乱报和打扰。
 
 ### N.E.K.O 插件侧配置
 
@@ -292,6 +300,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | --------------------------- | ----------------------------- |
 | `/neko accept <pending_id>` | 确认执行 N.E.K.O 请求的 Minecraft 指令 |
 | `/neko reject <pending_id>` | 拒绝 N.E.K.O 请求的 Minecraft 指令   |
+| `/neko plan <text>`        | 设置游戏内右上角 HUD 显示的计划文本    |
+| `/neko plan clear`         | 清除 HUD 计划显示                    |
 
 当 N.E.K.O 请求执行指令时，所有在线玩家会收到带有可点击按钮的提示消息。
 
@@ -303,11 +313,12 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 minecraft-mod/src/main/java/com/neko_tlm_bridge/
 ├── NekoTlmBridge.java          # 模组主类，生命周期管理与 handler 初始化
 ├── client/
-│   └── NekoConfigScreen.java   # 配置界面
+│   ├── NekoConfigScreen.java   # 配置界面
+│   └── PlanOverlayRenderer.java # 计划 HUD 渲染
 ├── config/
 │   └── ModConfig.java          # 配置定义
 ├── event/
-│   └── GameEventHandler.java   # 游戏事件监听与推送（受伤/死亡/天气/昼夜/群系/背包/成就/方块/钓鱼/棋局）
+│   └── GameEventHandler.java   # 游戏事件监听与推送（受伤/死亡/天气/昼夜/群系/维度/背包/成就/方块/钓鱼/棋局）
 ├── tlm/
 │   ├── LittleMaidCompat.java       # 车万女仆 API 扩展注册
 │   ├── NekoBridgeTool.java         # AI 工具：消息转发到 N.E.K.O
@@ -325,12 +336,13 @@ minecraft-mod/src/main/java/com/neko_tlm_bridge/
         ├── MessageRouter.java            # 消息路由分发 + 主线程队列
         ├── MaidStatusHandler.java        # 女仆状态查询
         ├── CommandMaidHandler.java       # 女仆控制命令（跟随/坐下/任务/日程/装备）
-        ├── GameContextHandler.java       # 游戏上下文查询（7种 category + awareness）
+        ├── GameContextHandler.java       # 游戏上下文查询（8种 category + awareness）
         ├── ChatHandler.java             # 聊天消息发送
         ├── CommandExecutionHandler.java  # 服务器命令执行（需玩家确认）
         ├── AttackTargetHandler.java     # 攻击目标管理
         ├── SkillHandler.java            # 技能查询与使用
         ├── ConfigHandler.java           # 配置查询与监控女仆设置
+        ├── SetPlanHandler.java          # 计划设置处理
         └── MaidHelper.java              # 女仆查找共享工具方法
 ```
 
@@ -349,13 +361,13 @@ neko_minecraft/
 │   ├── __init__.py      # 子包导出入口
 │   ├── context.py       # 陪玩上下文总协调器
 │   ├── memory.py        # 短期共同经历记忆
-│   ├── activity.py      # 玩家活动状态推断（14种状态分类）
+│   ├── activity.py      # 玩家活动状态推断（18种状态分类）
 │   ├── quiet.py         # 安静陪伴触发器
 │   ├── suggestion.py    # 主动建议触发器（场景化轻量建议）
 │   ├── minigame.py      # 小游戏陪伴（棋局事件处理/冷却/上下文裁剪）
 │   ├── push.py          # Minecraft 上下文 push 聚合与节流
 │   └── debug_log.py     # 陪玩调试日志
-├── tools.py             # LLM 工具业务逻辑（10个 do_* 函数）
+├── tools.py             # LLM 工具业务逻辑（11个 do_* 函数）
 ├── tool_defs.py         # LLM 工具元数据常量（name/description/parameters）
 ├── config.json          # 默认配置
 ├── plugin.toml          # 插件描述与运行时配置

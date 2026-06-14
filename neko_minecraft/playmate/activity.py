@@ -68,12 +68,19 @@ class PlayerActivityInference:
         held = str(data.get("player_held_item", "")).lower()
         if "fishing_rod" in held:
             return "fishing"
+        dimension = str(data.get("player_dimension", ""))
+        if "the_nether" in dimension:
+            return "nether_exploring"
+        if "the_end" in dimension:
+            return "end_exploring"
         if data.get("is_underground"):
             if any(k in held for k in ("pickaxe", "torch", "ore")):
                 return "mining"
             return "underground_exploring"
         if any(k in held for k in ("pickaxe", "shovel", "axe")):
             return "gathering"
+        if self._is_redstone_item(held):
+            return "redstone_engineering"
         if self._is_building_item(held):
             return "base_building"
         if any(k in held for k in ("sword", "bow", "crossbow", "trident", "shield")):
@@ -85,6 +92,8 @@ class PlayerActivityInference:
             return "exploring"
         if self._has_travel_hint(data, memory):
             return "traveling"
+        if "emerald" in held and self._recent_trading_evidence(memory):
+            return "trading"
         if not held:
             return "idle"
         return "unknown"
@@ -179,6 +188,26 @@ class PlayerActivityInference:
         )
         return held in exact_blocks
 
+    def _is_redstone_item(self, held):
+        if not held:
+            return False
+        redstone_keywords = (
+            "redstone", "repeater", "comparator", "piston", "observer",
+            "hopper", "dispenser", "dropper", "lever", "button",
+            "pressure_plate", "tripwire", "daylight_detector",
+        )
+        return any(k in held for k in redstone_keywords)
+
+    def _recent_trading_evidence(self, memory):
+        if not memory:
+            return False
+        now = time.time()
+        container_count = 0
+        for item in memory.recent(8):
+            if item.kind == "container_interaction" and now - item.timestamp < 120:
+                container_count += 1
+        return container_count >= 2
+
     def _label(self, state):
         return {
             "unknown": "未知",
@@ -195,4 +224,8 @@ class PlayerActivityInference:
             "mob_farming": "刷怪/战斗收尾",
             "exploring": "探索",
             "idle": "闲置",
+            "redstone_engineering": "红石工程",
+            "nether_exploring": "下界探索",
+            "end_exploring": "末地探索",
+            "trading": "村民交易",
         }.get(state, state)

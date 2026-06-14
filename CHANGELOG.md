@@ -1,5 +1,38 @@
 # 更新日志
 
+## v1.0.4 (2026-06-15)（暂未发布Releases）
+
+### 新功能
+
+- **饥饿警告**：感知系统新增玩家饥饿值检测
+  - 饥饿值 ≤ 6 时推送紧急警告（5 分钟冷却）
+  - 饥饿值 ≤ 12 且处于危险状态时推送普通提醒（10 分钟冷却）
+  - Java 端 awareness 和 user context 新增 `player_food_level`、`player_saturation` 字段
+- **维度切换事件**：玩家维度变化时推送 `dimension_change` 事件
+  - 包含 `from_dimension` 和 `to_dimension` 字段
+  - Python 端自动映射为中文名称（主世界/下界/末地）
+  - Java 端 awareness 新增 `player_dimension` 字段
+- **安静陪伴场景扩展**：新增 4 种活动状态识别与陪伴文本
+  - 红石工程（`redstone_engineering`）：手持红石相关物品时触发
+  - 下界探索（`nether_exploring`）：玩家位于下界维度时触发
+  - 末地探索（`end_exploring`）：玩家位于末地维度时触发
+  - 村民交易（`trading`）：手持绿宝石且有容器交互证据时触发
+  - 安静陪伴排除列表调整：移除 `mob_farming`，新增 `trading`
+- **游戏内计划显示**：在 Minecraft 右上角 HUD 显示当前计划
+  - LLM 可通过新增 `mc_set_plan` 工具下发计划
+  - 玩家可通过 `/neko plan <text>` 命令设置计划
+  - 玩家可通过 `/neko plan clear` 命令清除计划
+  - 计划支持多行显示（换行分隔）
+  - Java 端新增 `PlanOverlayRenderer` HUD 渲染器、`SetPlanHandler` 消息处理器
+  - Python 端 plan 和 goal 独立注入 LLM 上下文
+
+### 文档
+
+- README 更新：补充维度切换事件、饥饿警告、计划显示、新活动状态等说明
+- 使用教程更新：补充饥饿警告、维度切换、计划显示等功能说明
+
+***
+
 ## v1.0.3 (2026-06-14)
 
 ### 新功能

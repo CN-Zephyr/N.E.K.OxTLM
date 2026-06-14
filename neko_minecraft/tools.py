@@ -266,3 +266,20 @@ async def do_execute_command(plugin, *, command=""):
         "result": result_data.get("result"),
         "approved_by": result_data.get("approved_by", ""),
     })
+
+
+async def do_set_plan(plugin, *, plan=""):
+    plugin.logger.info(f"[Entry] set_plan called with plan='{plan[:80]}'")
+    if not plugin.connected:
+        return Err("Not connected to Minecraft")
+    result = await plugin._send_request({
+        "type": "set_plan",
+        "data": {"plan": plan},
+    })
+    if result.get("type") == "error":
+        return Err(str(result.get("data", {})))
+    result_data = result.get("data", {})
+    if result_data.get("success") is False:
+        return Err(result_data.get("error", "Set plan failed"))
+    plugin._playmate._current_plan = plan
+    return Ok({"success": True, "plan": plan})

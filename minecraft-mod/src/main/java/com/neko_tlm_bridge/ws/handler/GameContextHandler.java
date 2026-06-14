@@ -179,6 +179,8 @@ public class GameContextHandler implements MessageHandlerInterface {
             data.addProperty("is_drowning", player.getAirSupply() < player.getMaxAirSupply() * 0.4);
             data.addProperty("air_supply", player.getAirSupply());
             data.addProperty("max_air", player.getMaxAirSupply());
+            data.addProperty("food_level", player.getFoodData().getFoodLevel());
+            data.addProperty("saturation", player.getFoodData().getSaturationLevel());
             JsonArray effectsArray = new JsonArray();
             for (var effect : player.getActiveEffects()) {
                 JsonObject effectObj = new JsonObject();
@@ -308,6 +310,9 @@ public class GameContextHandler implements MessageHandlerInterface {
             data.addProperty("player_max_health", player.getMaxHealth());
             data.addProperty("player_on_fire", player.isOnFire());
             data.addProperty("player_is_drowning", player.getAirSupply() < player.getMaxAirSupply() * 0.4);
+            data.addProperty("player_food_level", player.getFoodData().getFoodLevel());
+            data.addProperty("player_saturation", player.getFoodData().getSaturationLevel());
+            data.addProperty("player_dimension", player.level().dimension().location().toString());
 
             data.addProperty("player_x", player.getX());
             data.addProperty("player_y", player.getY());

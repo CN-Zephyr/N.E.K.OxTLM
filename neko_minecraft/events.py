@@ -143,6 +143,14 @@ def _describe_wchess_fen(fen):
     return "，".join(parts) if parts else ""
 
 
+def _dimension_label(dim_id):
+    return {
+        "minecraft:overworld": "主世界",
+        "minecraft:the_nether": "下界",
+        "minecraft:the_end": "末地",
+    }.get(dim_id, dim_id.split(":")[-1])
+
+
 def format_event(event_data, assigned_maid_id):
     """格式化事件数据，返回 (parts_text, priority, side_effects) 元组。
 
@@ -242,6 +250,11 @@ def format_event(event_data, assigned_maid_id):
         adv_player = event_data.get("player_name", "伙伴")
         title = event_data.get("title", "某个成就")
         parts_text = f"{adv_player}解锁了成就「{title}」。即时情绪：开心、骄傲，适合一句像朋友一样的夸奖。"
+    elif event_type == "dimension_change":
+        from_dim = _dimension_label(event_data.get("from_dimension", ""))
+        to_dim = _dimension_label(event_data.get("to_dimension", ""))
+        priority = 7
+        parts_text = f"玩家从{from_dim}来到了{to_dim}！"
     elif event_type == "biome_change":
         priority = 5
         biome = event_data.get("biome", "")

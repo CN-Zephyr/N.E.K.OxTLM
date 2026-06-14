@@ -31,6 +31,7 @@ class PlaymateContextManager:
         )
         self._last_observed_state = "unknown"
         self._current_goal = ""
+        self._current_plan = ""
 
     def remember_event(self, event_type, text, priority=1):
         return self.memory.remember(event_type or "event", text, priority=priority)
@@ -116,6 +117,8 @@ class PlaymateContextManager:
         parts = [text]
         if self._current_goal:
             parts.append(f"当前共同目标：{self._current_goal}")
+        if self._current_plan:
+            parts.append(f"当前计划：\n{self._current_plan}")
         if summary:
             parts.append(f"最近共同经历：\n{summary}")
         return "\n".join(parts)
@@ -129,6 +132,10 @@ class PlaymateContextManager:
             "fishing": "一起钓鱼，安静等鱼上钩",
             "traveling": "一起赶路/跑图，看看前面有什么",
             "mob_farming": "一起处理刷怪和战斗收尾",
+            "redstone_engineering": "一起搞红石装置，帮忙递材料",
+            "nether_exploring": "一起探索下界，注意岩浆和恶魂",
+            "end_exploring": "一起探索末地，小心末影人",
+            "trading": "一起和村民交易",
             "organizing": "陪玩家整理物品，尽量少打扰",
         }
         return goals.get(state, f"一起进行{label}") if state not in ("unknown", "idle", "away") else ""

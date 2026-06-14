@@ -44,6 +44,8 @@ public class NekoTlmBridge {
         NeoForge.EVENT_BUS.addListener(NekoTlmBridge::onServerStopping);
         NeoForge.EVENT_BUS.addListener(NekoTlmBridge::onServerTick);
         NeoForge.EVENT_BUS.addListener(NekoTlmBridge::onRegisterCommands);
+
+        modEventBus.addListener(com.neko_tlm_bridge.client.PlanOverlayRenderer::onRegisterGuiLayers);
     }
 
     private static void onServerStarting(ServerStartingEvent event) {
@@ -64,6 +66,7 @@ public class NekoTlmBridge {
         AttackTargetHandler attackTargetHandler = new AttackTargetHandler(server);
         SkillHandler skillHandler = new SkillHandler(server);
         ConfigHandler configHandler = new ConfigHandler(server);
+        SetPlanHandler setPlanHandler = new SetPlanHandler();
 
         // Create router and register handlers
         java.util.Map<String, MessageHandlerInterface> handlers = new java.util.LinkedHashMap<>();
@@ -76,6 +79,7 @@ public class NekoTlmBridge {
         handlers.put(Protocol.TYPE_USE_SKILL, skillHandler);
         handlers.put(Protocol.TYPE_GET_CONFIG, configHandler);
         handlers.put(Protocol.TYPE_SET_MONITORED_MAID, configHandler);
+        handlers.put(Protocol.TYPE_SET_PLAN, setPlanHandler);
         messageRouter = new MessageRouter(handlers);
 
         // Create WebSocket server

@@ -10,6 +10,7 @@ public final class Protocol {
     public static final String TYPE_ATTACK_TARGET = "attack_target";
     public static final String TYPE_GET_CONFIG = "get_config";
     public static final String TYPE_SET_MONITORED_MAID = "set_monitored_maid";
+    public static final String TYPE_SET_PLAN = "set_plan";
     public static final String TYPE_PING = "ping";
 
     public static final String TYPE_MAID_STATUS = "maid_status";
@@ -25,6 +26,8 @@ public final class Protocol {
     public static final String TYPE_ATTACK_TARGET_RESULT = "attack_target_result";
     public static final String TYPE_CONFIG = "config";
     public static final String TYPE_CONFIG_UPDATE = "config_update";
+    public static final String TYPE_PLAN_RESULT = "plan_result";
+    public static final String TYPE_PLAN_UPDATE = "plan_update";
 
     // New event types for companion awareness
     public static final String EVENT_MAID_HURT = "maid_hurt";
@@ -46,6 +49,7 @@ public final class Protocol {
     public static final String EVENT_CHESS_GAME_START = "chess_game_start";
     public static final String EVENT_CHESS_MID_GAME = "chess_mid_game";
     public static final String EVENT_CHESS_GAME_END = "chess_game_end";
+    public static final String EVENT_DIMENSION_CHANGE = "dimension_change";
 
     private Protocol() {}
 }

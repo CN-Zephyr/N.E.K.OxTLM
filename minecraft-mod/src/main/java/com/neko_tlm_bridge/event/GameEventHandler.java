@@ -279,6 +279,8 @@ public class GameEventHandler {
     private static long candidateBiomeStartTick = 0;
     private static final long BIOME_DEBOUNCE_TICKS = 200; // Must stay in new biome for 10 seconds
 
+    private static String lastPlayerDimension = "";
+
     // Chess game tracking
     private static final String BOARD_GAMES_TASK_UID = "touhou_little_maid:board_games";
     private static final long CHESS_CHECK_INTERVAL = 20; // Check every 1 second (20 ticks)
@@ -323,6 +325,23 @@ public class GameEventHandler {
 
         flushBehaviorAggregates(currentTick, false);
         flushExpiredBlockActivities(currentTick, false);
+
+        // Dimension change detection
+        if (!monitoredMaidId.isEmpty()) {
+            EntityMaid maid = findMaidById(monitoredMaidId, server);
+            if (maid != null && maid.getOwner() instanceof net.minecraft.server.level.ServerPlayer player) {
+                String currentDimension = player.level().dimension().location().toString();
+                if (!lastPlayerDimension.isEmpty() && !lastPlayerDimension.equals(currentDimension)) {
+                    JsonObject eventData = new JsonObject();
+                    eventData.addProperty("event_type", Protocol.EVENT_DIMENSION_CHANGE);
+                    eventData.addProperty("player_name", player.getName().getString());
+                    eventData.addProperty("from_dimension", lastPlayerDimension);
+                    eventData.addProperty("to_dimension", currentDimension);
+                    webSocketServer.broadcastEvent(eventData);
+                }
+                lastPlayerDimension = currentDimension;
+            }
+        }
 
         // Biome change detection (runs every tick for debounce accuracy)
         if (!monitoredMaidId.isEmpty()) {

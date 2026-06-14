@@ -207,3 +207,23 @@ MC_EXECUTE_COMMAND = {
     },
     "timeout": 120,
 }
+
+MC_SET_PLAN = {
+    "name": "mc_set_plan",
+    "description": (
+        "设置游戏内右上角显示的计划/目标。"
+        "plan参数为计划内容，多行用换行分隔，传空字符串清除计划。"
+        "适用于和玩家商量好目标后，将计划显示在游戏画面上作为提醒。"
+        "例如：'今天的目标：\n1. 找钻石\n2. 建庇护所'"
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "plan": {
+                "type": "string",
+                "description": "计划内容，多行用换行分隔，空字符串清除计划",
+            },
+        },
+        "required": ["plan"],
+    },
+}

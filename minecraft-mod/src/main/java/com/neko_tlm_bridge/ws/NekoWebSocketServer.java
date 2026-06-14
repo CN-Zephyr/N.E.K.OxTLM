@@ -116,6 +116,19 @@ public class NekoWebSocketServer extends WebSocketServer {
         }
     }
 
+    public void broadcastPlanUpdate(String planText) {
+        if (clients.isEmpty()) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", Protocol.TYPE_PLAN_UPDATE);
+        JsonObject data = new JsonObject();
+        data.addProperty("plan", planText != null ? planText : "");
+        msg.add("data", data);
+        String json = GSON.toJson(msg);
+        for (WebSocket client : clients) {
+            sendToClient(client, json);
+        }
+    }
+
     public boolean hasClients() {
         return !clients.isEmpty();
     }

@@ -23,6 +23,7 @@ from .tool_defs import (
     MC_MAID_STATUS, MC_SWITCH_FOLLOW, MC_SWITCH_SIT,
     MC_SWITCH_TASK, MC_SWITCH_SCHEDULE, MC_EQUIP_ITEM,
     MC_SEND_CHAT, MC_GAME_CONTEXT, MC_USE_SKILL, MC_EXECUTE_COMMAND,
+    MC_SET_PLAN,
 )
 
 
@@ -204,6 +205,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return
         if msg_type == "config_update":
             _config.sync_config(self, data.get("data", {}))
+            return
+        if msg_type == "plan_update":
+            plan_text = data.get("data", {}).get("plan", "")
+            self._playmate._current_plan = plan_text
             return
         if msg_type == "event":
             await self._handle_event(data)
@@ -419,3 +424,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @llm_tool(**MC_EXECUTE_COMMAND)
     async def execute_command(self, *, command="", **_):
         return await _tools.do_execute_command(self, command=command)
+
+    @llm_tool(**MC_SET_PLAN)
+    async def set_plan(self, *, plan="", **_):
+        return await _tools.do_set_plan(self, plan=plan)
