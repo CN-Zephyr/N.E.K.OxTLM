@@ -13,7 +13,7 @@ class MinecraftPushRouter:
         self._flush_task = None
         self._push_times = deque()
 
-    async def push(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None):
+    async def push(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None, coalesce_key=None):
         if not text:
             return
         if aggregate is None:
@@ -26,7 +26,7 @@ class MinecraftPushRouter:
                 return
             self._ensure_flush_task()
             return
-        self._direct_push(text, ai_behavior=ai_behavior, priority=priority, metadata=metadata)
+        self._direct_push(text, ai_behavior=ai_behavior, priority=priority, metadata=metadata, coalesce_key=coalesce_key)
 
     def recent_push_count(self, window_seconds=60):
         now = time.time()
@@ -68,15 +68,16 @@ class MinecraftPushRouter:
         priority = max((item[2] for item in items), default=1)
         self._direct_push(merged, ai_behavior="read", priority=priority)
 
-    def _direct_push(self, text, ai_behavior="read", priority=1, metadata=None):
+    def _direct_push(self, text, ai_behavior="read", priority=1, metadata=None, coalesce_key=None):
         self._push_times.append(time.time())
-        self._plugin._playmate_debug.record("push", route="direct", ai_behavior=ai_behavior, priority=priority, text=str(text)[:160])
+        self._plugin._playmate_debug.record("push", route="direct", ai_behavior=ai_behavior, priority=priority, coalesce_key=coalesce_key, text=str(text)[:160])
         self._plugin.push_message(
             source="minecraft",
             ai_behavior=ai_behavior,
             parts=[{"type": "text", "text": text}],
             metadata=metadata,
             priority=priority,
+            coalesce_key=coalesce_key,
         )
 
     def _trim_push_times(self, now, window_seconds):

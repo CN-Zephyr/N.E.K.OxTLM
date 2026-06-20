@@ -26,6 +26,23 @@ from .tool_defs import (
     MC_SET_PLAN,
 )
 
+# respond 事件的 coalesce_key 映射：相同 key 的新推送覆盖旧的未消费推送
+# 死亡/聊天/成就/维度切换不 coalesce（每条都是独立的重大事件）
+_ALERT_EVENTS = {"maid_hurt", "player_hurt"}
+_EVENT_COALESCE_KEYS = {
+    "biome_change": "mc_event",
+    "weather_change": "mc_event",
+    "time_phase_change": "mc_event",
+    "inventory_change": "mc_event",
+    "item_fished": "mc_event",
+}
+
+
+def _event_coalesce_key(event_type):
+    if event_type in _ALERT_EVENTS:
+        return "mc_alert"
+    return _EVENT_COALESCE_KEYS.get(event_type)
+
 
 @neko_plugin
 class NekoMinecraftPlugin(NekoPluginBase):
@@ -84,13 +101,14 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         self._playmate = PlaymateContextManager(self)
 
-    async def _push_minecraft_context(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None):
+    async def _push_minecraft_context(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None, coalesce_key=None):
         await self._minecraft_push.push(
             text,
             ai_behavior=ai_behavior,
             priority=priority,
             metadata=metadata,
             aggregate=aggregate,
+            coalesce_key=coalesce_key,
         )
 
     @lifecycle(id="startup")
@@ -279,6 +297,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 ai_behavior=ai_behavior,
                 priority=priority if ai_behavior == "respond" else 2,
                 aggregate=ai_behavior != "respond",
+                coalesce_key="mc_chess" if ai_behavior == "respond" else None,
             )
             return
 
@@ -289,6 +308,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             parts_text,
             ai_behavior="respond",
             priority=priority,
+            coalesce_key=_event_coalesce_key(event_type),
         )
 
     async def _send(self, data):

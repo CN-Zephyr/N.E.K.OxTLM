@@ -67,7 +67,7 @@ class PlaymateContextManager:
                 aggregate = False
             self._current_goal = self._goal_for_state(update.state, update.label)
             text = self._with_shared_context(activity_text, summary)
-            await self._plugin._push_minecraft_context(text, ai_behavior=ai_behavior, priority=priority, aggregate=aggregate)
+            await self._plugin._push_minecraft_context(text, ai_behavior=ai_behavior, priority=priority, aggregate=aggregate, coalesce_key="mc_activity" if ai_behavior == "respond" else None)
         stable_state = self.activity.stable_state
         if stable_state != self._last_observed_state:
             self._last_observed_state = stable_state
@@ -86,7 +86,7 @@ class PlaymateContextManager:
                 max_text_length=self._plugin._playmate_memory_inject_chars,
             )
             text = self._with_shared_context(quiet_text, summary)
-            await self._plugin._push_minecraft_context(text, ai_behavior="respond", priority=3, aggregate=False)
+            await self._plugin._push_minecraft_context(text, ai_behavior="respond", priority=3, aggregate=False, coalesce_key="mc_companion")
         suggestion = None
         if not quiet_text:
             suggestion = self.suggestion.observe(
@@ -111,6 +111,7 @@ class PlaymateContextManager:
                 ai_behavior="respond" if should_respond else "read",
                 priority=3 if should_respond else 1,
                 aggregate=not should_respond,
+                coalesce_key="mc_suggestion" if should_respond else None,
             )
 
     def _with_shared_context(self, text, summary):

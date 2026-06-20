@@ -69,6 +69,7 @@ class AwarenessManager:
                                 change_text,
                                 ai_behavior="respond",
                                 priority=6 if has_urgent else 3,
+                                coalesce_key="mc_alert" if has_urgent else "mc_awareness",
                             )
                 await asyncio.sleep(self._plugin._awareness_interval)
             except asyncio.CancelledError:
