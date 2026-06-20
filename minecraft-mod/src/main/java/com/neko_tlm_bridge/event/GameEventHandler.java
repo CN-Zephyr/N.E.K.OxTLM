@@ -41,12 +41,12 @@ import java.util.Map;
 @EventBusSubscriber
 public class GameEventHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger("NekoTlmBridge");
-    private static NekoWebSocketServer webSocketServer;
+    private static volatile NekoWebSocketServer webSocketServer;
 
     // Track maid inventory snapshots when player opens backpack
     private static final Map<String, Map<Integer, String>> openInventorySnapshots = new HashMap<>();
     // The maid_id that the plugin wants us to monitor for inventory changes
-    private static String monitoredMaidId = "";
+    private static volatile String monitoredMaidId = "";
     private static final Map<String, BlockActivityAggregate> blockActivityAggregates = new HashMap<>();
     private static final BehaviorAggregate hurtAggregate = new BehaviorAggregate(Protocol.EVENT_PLAYER_HURT);
     private static final BehaviorAggregate killAggregate = new BehaviorAggregate(Protocol.EVENT_PLAYER_KILL_ENTITY);
@@ -152,6 +152,25 @@ public class GameEventHandler {
 
     public static void flushPendingBehaviorEvents() {
         flushBehaviorAggregates(Long.MAX_VALUE, true);
+    }
+
+    /** 清理所有静态状态，避免存档切换/服务端重启时残留状态导致误报或内存泄漏 */
+    public static void resetState() {
+        openInventorySnapshots.clear();
+        blockActivityAggregates.clear();
+        hurtAggregate.reset();
+        killAggregate.reset();
+        lastRaining = false;
+        lastThundering = false;
+        lastIsNight = false;
+        lastWeatherCheckTick = 0;
+        lastReportedBiome = "";
+        candidateBiome = "";
+        candidateBiomeStartTick = 0;
+        lastPlayerDimension = "";
+        lastChessCheckTick = 0;
+        currentChessGame = null;
+        endedBoardPos = null;
     }
 
     @SubscribeEvent
@@ -326,58 +345,58 @@ public class GameEventHandler {
         flushBehaviorAggregates(currentTick, false);
         flushExpiredBlockActivities(currentTick, false);
 
-        // Dimension change detection
+        // 查询一次 maid 引用，供维度检测、生物群系检测、棋局检测共用
+        EntityMaid maid = null;
         if (!monitoredMaidId.isEmpty()) {
-            EntityMaid maid = findMaidById(monitoredMaidId, server);
-            if (maid != null && maid.getOwner() instanceof net.minecraft.server.level.ServerPlayer player) {
-                String currentDimension = player.level().dimension().location().toString();
-                if (!lastPlayerDimension.isEmpty() && !lastPlayerDimension.equals(currentDimension)) {
-                    JsonObject eventData = new JsonObject();
-                    eventData.addProperty("event_type", Protocol.EVENT_DIMENSION_CHANGE);
-                    eventData.addProperty("player_name", player.getName().getString());
-                    eventData.addProperty("from_dimension", lastPlayerDimension);
-                    eventData.addProperty("to_dimension", currentDimension);
-                    webSocketServer.broadcastEvent(eventData);
-                }
-                lastPlayerDimension = currentDimension;
+            maid = findMaidById(monitoredMaidId, server);
+        }
+
+        // Dimension change detection
+        if (maid != null && maid.getOwner() instanceof net.minecraft.server.level.ServerPlayer player) {
+            String currentDimension = player.level().dimension().location().toString();
+            if (!lastPlayerDimension.isEmpty() && !lastPlayerDimension.equals(currentDimension)) {
+                JsonObject eventData = new JsonObject();
+                eventData.addProperty("event_type", Protocol.EVENT_DIMENSION_CHANGE);
+                eventData.addProperty("player_name", player.getName().getString());
+                eventData.addProperty("from_dimension", lastPlayerDimension);
+                eventData.addProperty("to_dimension", currentDimension);
+                webSocketServer.broadcastEvent(eventData);
             }
+            lastPlayerDimension = currentDimension;
         }
 
         // Biome change detection (runs every tick for debounce accuracy)
-        if (!monitoredMaidId.isEmpty()) {
-            EntityMaid maid = findMaidById(monitoredMaidId, server);
-            if (maid != null) {
-                String currentBiome = maid.level().getBiome(maid.blockPosition())
-                        .unwrapKey()
-                        .map(k -> k.location().toString())
-                        .orElse("unknown");
-                if (currentBiome.equals(lastReportedBiome)) {
-                    // Back to reported biome, reset candidate
+        if (maid != null) {
+            String currentBiome = maid.level().getBiome(maid.blockPosition())
+                    .unwrapKey()
+                    .map(k -> k.location().toString())
+                    .orElse("unknown");
+            if (currentBiome.equals(lastReportedBiome)) {
+                // Back to reported biome, reset candidate
+                candidateBiome = "";
+            } else if (currentBiome.equals(candidateBiome)) {
+                // Still in candidate biome, check debounce
+                if (currentTick - candidateBiomeStartTick >= BIOME_DEBOUNCE_TICKS) {
+                    JsonObject eventData = new JsonObject();
+                    eventData.addProperty("event_type", Protocol.EVENT_BIOME_CHANGE);
+                    eventData.addProperty("maid_id", maid.getStringUUID());
+                    eventData.addProperty("maid_name", maid.getName().getString());
+                    eventData.addProperty("biome", currentBiome);
+                    eventData.addProperty("old_biome", lastReportedBiome);
+                    webSocketServer.broadcastEvent(eventData);
+                    lastReportedBiome = currentBiome;
                     candidateBiome = "";
-                } else if (currentBiome.equals(candidateBiome)) {
-                    // Still in candidate biome, check debounce
-                    if (currentTick - candidateBiomeStartTick >= BIOME_DEBOUNCE_TICKS) {
-                        JsonObject eventData = new JsonObject();
-                        eventData.addProperty("event_type", Protocol.EVENT_BIOME_CHANGE);
-                        eventData.addProperty("maid_id", maid.getStringUUID());
-                        eventData.addProperty("maid_name", maid.getName().getString());
-                        eventData.addProperty("biome", currentBiome);
-                        eventData.addProperty("old_biome", lastReportedBiome);
-                        webSocketServer.broadcastEvent(eventData);
-                        lastReportedBiome = currentBiome;
-                        candidateBiome = "";
-                    }
-                } else {
-                    // New biome detected, start debounce timer
-                    candidateBiome = currentBiome;
-                    candidateBiomeStartTick = currentTick;
                 }
+            } else {
+                // New biome detected, start debounce timer
+                candidateBiome = currentBiome;
+                candidateBiomeStartTick = currentTick;
+            }
 
-                // Chess game detection (throttled)
-                if (currentTick - lastChessCheckTick >= CHESS_CHECK_INTERVAL) {
-                    lastChessCheckTick = currentTick;
-                    checkChessGame(maid, server);
-                }
+            // Chess game detection (throttled)
+            if (currentTick - lastChessCheckTick >= CHESS_CHECK_INTERVAL) {
+                lastChessCheckTick = currentTick;
+                checkChessGame(maid, server);
             }
         }
 

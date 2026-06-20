@@ -45,7 +45,9 @@ public class NekoTlmBridge {
         NeoForge.EVENT_BUS.addListener(NekoTlmBridge::onServerTick);
         NeoForge.EVENT_BUS.addListener(NekoTlmBridge::onRegisterCommands);
 
-        modEventBus.addListener(com.neko_tlm_bridge.client.PlanOverlayRenderer::onRegisterGuiLayers);
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            modEventBus.addListener(com.neko_tlm_bridge.client.PlanOverlayRenderer::onRegisterGuiLayers);
+        }
     }
 
     private static void onServerStarting(ServerStartingEvent event) {
@@ -108,6 +110,8 @@ public class NekoTlmBridge {
             NekoWebSocketServerHolder.setServer(null);
             GameEventHandler.setWebSocketServer(null);
         }
+        // 清理静态状态，避免存档切换时残留导致误报或内存泄漏
+        GameEventHandler.resetState();
     }
 
     private static void onServerTick(ServerTickEvent.Post event) {

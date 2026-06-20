@@ -143,7 +143,11 @@ public class NekoWebSocketServer extends WebSocketServer {
 
     private void sendToClient(WebSocket conn, String message) {
         if (conn != null && conn.isOpen()) {
-            conn.send(message);
+            try {
+                conn.send(message);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to send message to client: {}", e.getMessage());
+            }
         }
     }
 

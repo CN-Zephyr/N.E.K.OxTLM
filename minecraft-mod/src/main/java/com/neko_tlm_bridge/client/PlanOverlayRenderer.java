@@ -8,7 +8,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 public class PlanOverlayRenderer {
-    private static String planText = "";
+    private static volatile String planText = "";
 
     public static void setPlan(String text) {
         planText = text != null ? text : "";

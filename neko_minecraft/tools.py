@@ -189,10 +189,15 @@ async def do_send_chat(plugin, *, message, maid_id=None):
     resolved_id = plugin._resolve_maid_id(maid_id)
     if not resolved_id:
         return Err("No maid_id available. Call mc_maid_status first or assign a maid in config.")
-    plugin._bridge.send({
+    result = await plugin._send_request({
         "type": "send_chat",
         "data": {"maid_id": resolved_id, "message": message},
     })
+    if result.get("type") == "error":
+        return Err(str(result.get("data", {})))
+    result_data = result.get("data", {})
+    if not result_data.get("success", False):
+        return Err("Chat send failed")
     return Ok({"success": True})
 
 
