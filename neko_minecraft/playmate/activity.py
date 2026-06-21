@@ -158,7 +158,7 @@ class PlayerActivityInference:
         if any(k in held for k in ("chest", "barrel", "shulker_box", "bundle")):
             return True
         inventory = data.get("maid_inventory") or []
-        return len(inventory) >= 18 and not data.get("is_underground")
+        return len(inventory) >= 18 and not data.get("maid_is_underground")
 
     def _has_travel_hint(self, data, memory):
         distance = data.get("maid_player_distance")

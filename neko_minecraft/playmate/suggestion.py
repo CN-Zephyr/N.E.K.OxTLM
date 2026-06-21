@@ -50,14 +50,14 @@ class ProactiveSuggestionTrigger:
         ))
 
         if stable_state in ("mining", "underground_exploring"):
-            if data.get("is_underground") and data.get("light_level", 15) < 7:
+            if data.get("maid_is_underground") and data.get("maid_light_level", 15) < 7:
                 if has_torches:
                     return "dark_torch_available", "这里偏暗，女仆背包里有火把。可以在不打断玩家的前提下，用一句很短的陪玩语气轻轻提醒要不要照亮一下。", True
                 return "dark_no_torch", "这里偏暗，而且女仆背包里没有看到火把。可以用一句很短、低打扰的陪玩语气表达担心，不要催促。", True
             if "pickaxe" in held and not has_torches:
                 return "mining_no_torch", "玩家像是在挖矿，但女仆背包里没看到火把。可以低频、轻轻提醒补光资源可能不多，不要像库存管理。", True
 
-        if stable_state in ("building", "base_building", "gathering") and inventory:
+        if stable_state in ("base_building", "gathering") and inventory:
             useful_blocks = self._top_items(inventory, ("planks", "stone", "cobblestone", "dirt", "glass", "brick", "torch", "lantern"))
             if useful_blocks:
                 return "build_inventory", f"玩家在{self._state_label(stable_state)}，女仆背包里有{useful_blocks}。可以自然提一句也许能帮上忙，保持一句话、低打扰。", False
@@ -104,7 +104,6 @@ class ProactiveSuggestionTrigger:
 
     def _state_label(self, stable_state):
         return {
-            "building": "建造/布置",
             "base_building": "建家/布置",
             "gathering": "采集整理",
         }.get(stable_state, stable_state)

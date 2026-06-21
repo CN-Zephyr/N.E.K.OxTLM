@@ -54,7 +54,9 @@ class MinecraftPushRouter:
         if not ignore_throttle and len(self._push_times) >= self._throttle_limit:
             self._plugin._playmate_debug.record("push", route="throttled", pending=len(self._pending_low), recent_push_count=len(self._push_times))
             if self._flush_task is None or self._flush_task.done() or self._flush_task is asyncio.current_task():
-                self._flush_task = asyncio.create_task(self._delayed_flush())
+                # 节流重试时使用至少 1 秒间隔，避免 aggregate_window=0 时 busy loop
+                retry_delay = max(1.0, self._aggregate_window)
+                self._flush_task = asyncio.create_task(self._delayed_flush_with_delay(retry_delay))
             return
         items = self._pending_low
         self._pending_low = []
@@ -64,9 +66,20 @@ class MinecraftPushRouter:
                 line = line.strip()
                 if line:
                     lines.append(line if line.startswith("-") else f"- {line}")
+        if not lines:
+            return
         merged = "Minecraft 陪玩上下文：\n" + "\n".join(lines)
         priority = max((item[2] for item in items), default=1)
-        self._direct_push(merged, ai_behavior="read", priority=priority)
+        try:
+            self._direct_push(merged, ai_behavior="read", priority=priority)
+        except Exception as e:
+            # 推送失败时回退 pending，避免数据静默丢失
+            self._plugin._playmate_debug.record("push", route="flush_error", error=str(e), recovered=len(items))
+            self._pending_low = items + self._pending_low
+
+    async def _delayed_flush_with_delay(self, delay):
+        await asyncio.sleep(delay)
+        await self._flush_pending()
 
     def _direct_push(self, text, ai_behavior="read", priority=1, metadata=None, coalesce_key=None):
         self._push_times.append(time.time())

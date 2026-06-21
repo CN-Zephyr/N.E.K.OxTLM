@@ -257,6 +257,9 @@ public class GameEventHandler {
             eventData.addProperty("maid_id", maid.getStringUUID());
             eventData.addProperty("maid_name", maid.getName().getString());
             eventData.addProperty("cause", event.getSource().getMsgId());
+            eventData.addProperty("death_x", maid.blockPosition().getX());
+            eventData.addProperty("death_y", maid.blockPosition().getY());
+            eventData.addProperty("death_z", maid.blockPosition().getZ());
             if (event.getSource().getEntity() instanceof LivingEntity killer) {
                 eventData.addProperty("killer", killer.getName().getString());
             }
@@ -269,6 +272,9 @@ public class GameEventHandler {
             eventData.addProperty("event_type", Protocol.EVENT_PLAYER_DEATH);
             eventData.addProperty("player_name", player.getName().getString());
             eventData.addProperty("cause", event.getSource().getMsgId());
+            eventData.addProperty("death_x", player.blockPosition().getX());
+            eventData.addProperty("death_y", player.blockPosition().getY());
+            eventData.addProperty("death_z", player.blockPosition().getZ());
             if (event.getSource().getEntity() instanceof LivingEntity killer) {
                 eventData.addProperty("killer", killer.getName().getString());
             }
@@ -708,8 +714,8 @@ public class GameEventHandler {
             targets.add(target);
         }
         eventData.add("targets", targets);
-        aggregate.reset();
         webSocketServer.broadcastEvent(eventData);
+        aggregate.reset();
     }
 
     private static String primaryTarget(BehaviorAggregate aggregate) {
@@ -754,8 +760,10 @@ public class GameEventHandler {
     }
 
     private static void flushBlockActivity(String key, BlockActivityAggregate aggregate) {
-        blockActivityAggregates.remove(key);
-        if (aggregate.count < ModConfig.BLOCK_ACTIVITY_MIN_COUNT.get()) return;
+        if (aggregate.count < ModConfig.BLOCK_ACTIVITY_MIN_COUNT.get()) {
+            blockActivityAggregates.remove(key);
+            return;
+        }
 
         JsonObject eventData = new JsonObject();
         eventData.addProperty("event_type", Protocol.EVENT_BLOCK_ACTIVITY);
@@ -781,6 +789,7 @@ public class GameEventHandler {
         }
         eventData.add("top_blocks", topBlocks);
         webSocketServer.broadcastEvent(eventData);
+        blockActivityAggregates.remove(key);
     }
 
     private static String primaryBlock(BlockActivityAggregate aggregate) {
@@ -886,6 +895,13 @@ public class GameEventHandler {
         // Existing game — check for state changes
         int currentMoveCount = getMoveCount(boardEntity);
         boolean currentPlayerTurn = isPlayerTurn(boardEntity);
+
+        // 棋盘被重置（moveCount 回退），视为新游戏
+        if (currentMoveCount < currentChessGame.lastMoveCount) {
+            currentChessGame = new ChessGameState(gameType, boardPos,
+                    currentMoveCount, currentPlayerTurn);
+            return;
+        }
 
         // Check if game ended
         boolean gameEnded = isGameEnded(boardEntity);

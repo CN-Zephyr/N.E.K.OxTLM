@@ -155,6 +155,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         return Ok({"status": "stopped"})
 
     async def _poll_messages(self):
+        was_connected = False
         while True:
             try:
                 if self._bridge:
@@ -164,7 +165,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
                         self._bridge.stop()
                         self._instructions_injected = False
                         os._exit(0)
-                    if self._bridge.connected and not self._instructions_injected:
+                    is_connected = self._bridge.connected
+                    if is_connected and not was_connected:
+                        await self._on_bridge_reconnect()
+                    was_connected = is_connected
+                    if is_connected and not self._instructions_injected:
                         await self._inject_instructions()
                     for data in self._bridge.drain():
                         await self._handle_message(data)
@@ -174,6 +179,29 @@ class NekoMinecraftPlugin(NekoPluginBase):
             except Exception as e:
                 self.logger.error(f"Poll error: {e}")
                 await asyncio.sleep(1)
+
+    async def _on_bridge_reconnect(self):
+        """Bridge 重连后清理运行时状态，避免跨存档/跨会话串状态"""
+        self.logger.info("[Bridge] Reconnected, resetting runtime state")
+        # 取消所有待处理请求（MC 端已丢失这些请求的上下文，等满超时只会卡住 LLM）
+        for request_id, future in list(self._request_futures.items()):
+            if not future.done():
+                future.set_result({"type": "error", "data": {"message": "Connection reset, please retry"}})
+        self._request_futures.clear()
+        # 清理女仆状态缓存
+        self._maid_status_cache = {}
+        # 清理感知状态
+        if self._awareness:
+            self._awareness._last_awareness_state = {}
+            self._awareness._pending_revenge = None
+            self._awareness._was_dead = False
+        # 清理活动推断（重置为 unknown，让新存档重新推断）
+        if self._playmate and hasattr(self._playmate, 'activity') and self._playmate.activity:
+            self._playmate.activity._stable_state = "unknown"
+            self._playmate.activity._candidate_state = "unknown"
+            self._playmate.activity._candidate_count = 0
+        # 重置指令注入标志，重连后重新注入
+        self._instructions_injected = False
 
     async def _inject_instructions(self):
         self._instructions_injected = True

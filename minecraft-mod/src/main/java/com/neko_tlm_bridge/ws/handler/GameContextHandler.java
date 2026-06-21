@@ -55,7 +55,9 @@ public class GameContextHandler implements MessageHandlerInterface {
             case "position" -> contextData = collectPositionContext(maid);
             case "nearby_entities" -> contextData = collectNearbyEntitiesContext(maid);
             case "awareness" -> contextData = collectAwarenessContext(maid);
-            default -> contextData = collectWorldContext();
+            default -> {
+                return createErrorResponse(requestId, "Unknown category: " + category);
+            }
         }
 
         response.add("data", contextData);
@@ -300,8 +302,8 @@ public class GameContextHandler implements MessageHandlerInterface {
             data.addProperty("time_of_day", dayTime % 24000);
         }
 
-        data.addProperty("light_level", maid.level().getMaxLocalRawBrightness(maid.blockPosition()));
-        data.addProperty("is_underground", maid.getY() < maid.level().getSeaLevel() - 1
+        data.addProperty("maid_light_level", maid.level().getMaxLocalRawBrightness(maid.blockPosition()));
+        data.addProperty("maid_is_underground", maid.getY() < maid.level().getSeaLevel() - 1
                 && !maid.level().canSeeSky(maid.blockPosition()));
 
         LivingEntity owner = maid.getOwner();
@@ -318,8 +320,8 @@ public class GameContextHandler implements MessageHandlerInterface {
             data.addProperty("player_y", player.getY());
             data.addProperty("player_z", player.getZ());
             data.addProperty("maid_player_distance", maid.distanceTo(player));
-            data.addProperty("light_level", player.level().getMaxLocalRawBrightness(player.blockPosition()));
-            data.addProperty("is_underground", player.getY() < player.level().getSeaLevel() - 1
+            data.addProperty("player_light_level", player.level().getMaxLocalRawBrightness(player.blockPosition()));
+            data.addProperty("player_is_underground", player.getY() < player.level().getSeaLevel() - 1
                     && !player.level().canSeeSky(player.blockPosition()));
 
             ItemStack heldItem = player.getMainHandItem();

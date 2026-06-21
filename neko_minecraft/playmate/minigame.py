@@ -18,7 +18,11 @@ class MiniGameCompanion:
         context_text = self._context_text(event_data, chess_event_type)
         if not context_text:
             return None
-        if chess_event_type in ("chess_game_start", "chess_game_end"):
+        if chess_event_type == "chess_game_start":
+            return self._trim(context_text)
+        if chess_event_type == "chess_game_end":
+            # 棋局结束后清理对应的冷却记录，避免字典无限增长
+            self._cleanup_feedback(game_type)
             return self._trim(context_text)
         if not self._can_feedback(game_type, chess_event_type):
             return None
@@ -28,18 +32,19 @@ class MiniGameCompanion:
         now = time.time()
         key = f"{game_type}:{chess_event_type}"
         global_key = f"{game_type}:*"
-        if chess_event_type == "chess_game_end":
-            last_at = self._last_feedback_at.get(key, 0)
-            if now - last_at < self._cooldown_seconds:
-                return False
-            self._last_feedback_at[key] = now
-            return True
         last_at = max(self._last_feedback_at.get(key, 0), self._last_feedback_at.get(global_key, 0))
         if now - last_at < self._cooldown_seconds:
             return False
         self._last_feedback_at[key] = now
         self._last_feedback_at[global_key] = now
         return True
+
+    def _cleanup_feedback(self, game_type):
+        """棋局结束后清理对应 game_type 的冷却记录"""
+        prefix = f"{game_type}:"
+        keys_to_remove = [k for k in self._last_feedback_at if k.startswith(prefix)]
+        for k in keys_to_remove:
+            del self._last_feedback_at[k]
 
     def _memory_text(self, event_data, text, chess_event_type):
         game_name = self._game_name(event_data)

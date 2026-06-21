@@ -163,8 +163,12 @@ def format_event(event_data, assigned_maid_id):
     maid_name = event_data.get("maid_name", "")
 
     # Only filter by maid_id for events that carry one
-    if maid_id and assigned_maid_id and maid_id != assigned_maid_id:
-        return None, None, None
+    if maid_id:
+        if assigned_maid_id and maid_id != assigned_maid_id:
+            return None, None, None
+        if not assigned_maid_id:
+            # 未指定监控女仆时，忽略带 maid_id 的事件，避免角色混乱
+            return None, None, None
 
     priority = 5
     parts_text = ""
@@ -234,17 +238,25 @@ def format_event(event_data, assigned_maid_id):
         priority = 10
         cause = event_data.get("cause", "未知原因")
         killer = event_data.get("killer", "")
+        death_x = event_data.get("death_x", "")
+        death_y = event_data.get("death_y", "")
+        death_z = event_data.get("death_z", "")
         side_effects["pending_revenge"] = {"killer": killer, "cause": cause}
         side_effects["was_dead"] = True
+        location_text = f"，倒在了({death_x}, {death_y}, {death_z})" if death_x != "" else ""
         parts_text = (
-            f"你倒下了...（死因: {cause}）"
+            f"你倒下了...（死因: {cause}{location_text}）"
             f"（你就是「{maid_name}」）。即时情绪：失落、不甘心，也会担心玩家接下来一个人。"
         )
     elif event_type == "player_death":
         priority = 9
         cause = event_data.get("cause", "未知原因")
         dead_player = event_data.get("player_name", "伙伴")
-        parts_text = f"啊！{dead_player}死了！（死因: {cause}）即时情绪：震惊、担心和想赶过去陪着，适合一句短促关心。"
+        death_x = event_data.get("death_x", "")
+        death_y = event_data.get("death_y", "")
+        death_z = event_data.get("death_z", "")
+        location_text = f"，位置在({death_x}, {death_y}, {death_z})" if death_x != "" else ""
+        parts_text = f"啊！{dead_player}死了！（死因: {cause}{location_text}）即时情绪：震惊、担心和想赶过去陪着，适合一句短促关心。"
     elif event_type == "advancement":
         priority = 7
         adv_player = event_data.get("player_name", "伙伴")

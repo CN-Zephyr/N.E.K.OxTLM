@@ -6,6 +6,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 
 import websockets
 from websockets.exceptions import ConnectionClosed
@@ -138,6 +139,8 @@ class WSBridge:
                 async for raw in ws:
                     try:
                         data = json.loads(raw)
+                        if data.get("type") == "pong":
+                            self._last_pong_time = time.time()
                         if data.get("type") != "pong":
                             if data.get("type") == "game_context":
                                 self._logger.debug(f"[WSBridge] recv: {raw[:300]}")
@@ -163,10 +166,16 @@ class WSBridge:
                     return
 
         async def heartbeat_loop():
+            self._last_pong_time = time.time()
             while self._running and self.connected:
                 try:
                     await ws.send(json.dumps({"type": "ping"}))
                     await asyncio.sleep(self._heartbeat_interval)
+                    # 检查 pong 超时：如果超过 3 倍心跳间隔没收到 pong，认为应用层卡死
+                    if time.time() - self._last_pong_time > self._heartbeat_interval * 3:
+                        self._logger.warning("[WSBridge] Pong timeout, closing connection to trigger reconnect")
+                        await ws.close()
+                        return
                 except Exception:
                     return
 

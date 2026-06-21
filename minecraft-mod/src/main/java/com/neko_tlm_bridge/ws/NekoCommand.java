@@ -3,7 +3,10 @@ package com.neko_tlm_bridge.ws;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.neko_tlm_bridge.config.ModConfig;
 import com.neko_tlm_bridge.tlm.NekoWebSocketServerHolder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -51,6 +54,13 @@ public class NekoCommand {
             return 0;
         }
 
+        int minOpLevel = ModConfig.COMMAND_CONFIRMATION_MIN_OP_LEVEL.get();
+        if (!source.hasPermission(minOpLevel)) {
+            // 权限不足时拒绝，避免低权限玩家执行高危指令
+            source.sendFailure(Component.literal("权限不足，无法确认指令"));
+            return 0;
+        }
+
         PendingCommandManager manager = wsServer.getPendingCommandManager();
         PendingCommandManager.PendingCommand pending = manager.getAndRemove(pendingId);
 
@@ -62,7 +72,31 @@ public class NekoCommand {
         String command = pending.command;
         MinecraftServer server = source.getServer();
 
-        server.getCommands().performPrefixedCommand(source, command);
+        // 用 CommandDispatcher.execute 获取返回值，同时保证玩家能看到命令输出和报错
+        String trimmedCommand = command.startsWith("/") ? command.substring(1) : command;
+        Commands commands = server.getCommands();
+        ParseResults<CommandSourceStack> parse = commands.getDispatcher().parse(trimmedCommand, source);
+        int result = 0;
+        if (parse.getExceptions().size() > 0 || parse.getContext().getRange().isEmpty()) {
+            // 解析错误：发送错误消息给玩家
+            CommandSyntaxException exception = null;
+            if (parse.getExceptions().size() == 1) {
+                exception = parse.getExceptions().values().iterator().next();
+            } else if (parse.getContext().getRange().isEmpty()) {
+                exception = CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand().create();
+            }
+            if (exception != null) {
+                source.sendFailure(Component.literal(exception.getMessage()));
+            }
+        } else {
+            try {
+                result = commands.getDispatcher().execute(parse);
+            } catch (CommandSyntaxException e) {
+                source.sendFailure(Component.literal(e.getMessage()));
+            } catch (Exception e) {
+                source.sendFailure(Component.literal("命令执行出错: " + e.getMessage()));
+            }
+        }
 
         source.sendSuccess(() -> Component.translatable("neko_tlm_bridge.command.executed", command), true);
 
@@ -74,7 +108,7 @@ public class NekoCommand {
             }
             JsonObject data = new JsonObject();
             data.addProperty("approved", true);
-            data.addProperty("success", true);
+            data.addProperty("success", result > 0);
             data.addProperty("command", command);
             data.addProperty("approved_by", source.getTextName());
             response.add("data", data);

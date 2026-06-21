@@ -15,6 +15,7 @@ public class ModConfig {
     public static final ModConfigSpec.BooleanValue CHAT_BOX_ENABLED;
     public static final ModConfigSpec.BooleanValue WEATHER_EVENT_ENABLED;
     public static final ModConfigSpec.BooleanValue TIME_EVENT_ENABLED;
+    public static final ModConfigSpec.IntValue COMMAND_CONFIRMATION_MIN_OP_LEVEL;
     public static final ModConfigSpec.IntValue BEHAVIOR_AGGREGATE_IDLE_TICKS;
     public static final ModConfigSpec.IntValue BEHAVIOR_AGGREGATE_MAX_WINDOW_TICKS;
     public static final ModConfigSpec.IntValue BLOCK_ACTIVITY_IDLE_TICKS;
@@ -52,6 +53,9 @@ public class ModConfig {
         TIME_EVENT_ENABLED = builder
                 .translation("neko_tlm_bridge.config.bridge.timeEventEnabled")
                 .define("timeEventEnabled", true);
+        COMMAND_CONFIRMATION_MIN_OP_LEVEL = builder
+                .translation("neko_tlm_bridge.config.bridge.commandConfirmationMinOpLevel")
+                .defineInRange("commandConfirmationMinOpLevel", 0, 0, 4);
         builder.pop();
 
         builder.push("playmate_events");

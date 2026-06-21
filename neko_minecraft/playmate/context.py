@@ -129,7 +129,6 @@ class PlaymateContextManager:
             "mining": "一起下矿，注意照明和安全",
             "underground_exploring": "一起探洞，留意怪物和回路",
             "base_building": "一起建家/布置据点",
-            "building": "一起建造和整理当前区域",
             "fishing": "一起钓鱼，安静等鱼上钩",
             "traveling": "一起赶路/跑图，看看前面有什么",
             "mob_farming": "一起处理刷怪和战斗收尾",
