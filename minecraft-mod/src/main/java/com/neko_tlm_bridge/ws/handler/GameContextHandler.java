@@ -10,6 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -332,6 +333,34 @@ public class GameContextHandler implements MessageHandlerInterface {
                 data.addProperty("player_held_item", "");
                 data.addProperty("player_held_item_count", 0);
             }
+
+            data.addProperty("player_experience_level", player.experienceLevel);
+            data.addProperty("player_experience_progress", player.experienceProgress);
+
+            JsonArray equipmentArray = new JsonArray();
+            ItemStack[] playerEquipment = {
+                player.getMainHandItem(),
+                player.getOffhandItem(),
+                player.getItemBySlot(EquipmentSlot.HEAD),
+                player.getItemBySlot(EquipmentSlot.CHEST),
+                player.getItemBySlot(EquipmentSlot.LEGS),
+                player.getItemBySlot(EquipmentSlot.FEET)
+            };
+            String[] equipmentSlots = {"main_hand", "off_hand", "head", "chest", "legs", "feet"};
+            for (int i = 0; i < playerEquipment.length; i++) {
+                ItemStack stack = playerEquipment[i];
+                if (!stack.isEmpty() && stack.isDamageableItem()) {
+                    JsonObject equip = new JsonObject();
+                    equip.addProperty("slot", equipmentSlots[i]);
+                    equip.addProperty("item", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+                    equip.addProperty("durability", stack.getMaxDamage() - stack.getDamageValue());
+                    equip.addProperty("max_durability", stack.getMaxDamage());
+                    double ratio = (double) (stack.getMaxDamage() - stack.getDamageValue()) / stack.getMaxDamage();
+                    equip.addProperty("durability_ratio", Math.round(ratio * 100.0) / 100.0);
+                    equipmentArray.add(equip);
+                }
+            }
+            data.add("player_equipment_durability", equipmentArray);
         }
 
         JsonArray structuresArray = new JsonArray();

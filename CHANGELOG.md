@@ -34,6 +34,11 @@
   - 计划支持多行显示（换行分隔）
   - Java 端新增 `PlanOverlayRenderer` HUD 渲染器、`SetPlanHandler` 消息处理器
   - Python 端 plan 和 goal 独立注入 LLM 上下文
+- **玩家进度上下文**：awareness 新增玩家经验等级与装备耐久度字段
+  - 新增 `player_experience_level`（经验等级）、`player_experience_progress`（当前等级进度 0-1）
+  - 新增 `player_equipment_durability` 数组（主手/副手/头/胸/腿/脚 6 个槽位，仅记录有耐久度的物品）
+  - 每项含 `slot`、`item`、`durability`、`max_durability`、`durability_ratio`（耐久百分比）
+  - LLM 通过 `mc_game_context(awareness)` 主动查询时获取，不主动推送
 
 ### 文档
 
