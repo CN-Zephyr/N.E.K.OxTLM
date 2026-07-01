@@ -273,6 +273,7 @@ public class GameContextHandler implements MessageHandlerInterface {
             entityObj.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
             entityObj.addProperty("name", entity.getName().getString());
             entityObj.addProperty("health", entity.getHealth());
+            entityObj.addProperty("hostile", isHostileEntity(entity));
             entityObj.addProperty("x", entity.getX());
             entityObj.addProperty("y", entity.getY());
             entityObj.addProperty("z", entity.getZ());
@@ -421,6 +422,7 @@ public class GameContextHandler implements MessageHandlerInterface {
             JsonObject entityObj = new JsonObject();
             entityObj.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
             entityObj.addProperty("name", entity.getName().getString());
+            entityObj.addProperty("hostile", isHostileEntity(entity));
             entityObj.addProperty("distance", maid.distanceTo(entity));
             entitiesArray.add(entityObj);
             count++;
@@ -428,5 +430,9 @@ public class GameContextHandler implements MessageHandlerInterface {
         data.add("entities", entitiesArray);
 
         return data;
+    }
+
+    private boolean isHostileEntity(LivingEntity entity) {
+        return entity.getType().getCategory() == net.minecraft.world.entity.MobCategory.MONSTER;
     }
 }

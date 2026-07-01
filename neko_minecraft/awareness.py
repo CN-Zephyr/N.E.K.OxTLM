@@ -119,10 +119,8 @@ class AwarenessManager:
             }
 
             entities = data.get("entities", [])
-            hostile_types = ["creeper", "zombie", "skeleton", "spider", "enderman", "witch", "phantom", "slime", "wither", "blaze", "ghast"]
             for entity in entities:
-                entity_type = entity.get("type", "").lower()
-                if any(h in entity_type for h in hostile_types):
+                if entity.get("hostile", False):
                     new_state["nearby_hostiles"].append({
                         "name": entity.get("name", ""),
                         "distance": entity.get("distance", 999),
