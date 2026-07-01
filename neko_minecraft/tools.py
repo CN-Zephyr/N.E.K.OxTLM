@@ -115,13 +115,11 @@ async def do_switch_task(plugin, *, task=""):
     plugin.logger.info(f"[Entry] switch_task: '{task}' resolved to '{resolved_task}' (available={len(available)} tasks)")
 
     if resolved_task is None:
-        lines = []
-        for t in (available or []):
-            if isinstance(t, dict):
-                lines.append(f"- {t.get('id', '')}（{t.get('name', '')}）")
-            else:
-                lines.append(f"- {t}")
-        return Err(f"无法匹配'{task}'到任何工作模式。可用模式列表：\n" + "\n".join(lines) + "\n请从上面的列表中选择正确的模式ID重新调用。")
+        return _switch_task_recoverable_error(
+            task,
+            available,
+            "无法匹配到任何工作模式",
+        )
 
     result = await plugin._send_request({
         "type": "command_maid",
@@ -129,12 +127,115 @@ async def do_switch_task(plugin, *, task=""):
     })
     if result.get("type") == "error":
         plugin.logger.warning(f"[Entry] switch_task failed: {result.get('data', {})}")
-        return Err(str(result.get("data", {})))
+        return _switch_task_recoverable_error(
+            task,
+            available,
+            "Minecraft mod 返回错误",
+            result.get("data", {}),
+            resolved_task=resolved_task,
+        )
     result_data = result.get("data", {})
     if result_data.get("success") is False:
-        return Err(result_data.get("error", "Command failed"))
+        merged_available = result_data.get("available_tasks") or available
+        return _switch_task_recoverable_error(
+            task,
+            merged_available,
+            result_data.get("error", "Command failed"),
+            result_data,
+            resolved_task=resolved_task,
+        )
     plugin.logger.info(f"[Entry] switch_task success: task='{task}' -> '{resolved_task}'")
-    return Ok({"success": True, "current_task": task, "matched_task_id": resolved_task})
+    verification = await _verify_switched_task(plugin, maid_id, resolved_task)
+    return Ok({
+        "success": True,
+        "requested_task": task,
+        "matched_task_id": resolved_task,
+        **verification,
+    })
+
+
+def _switch_task_recoverable_error(task, available, message, raw_error=None, resolved_task=None):
+    return {
+        "output": {
+            "success": False,
+            "recoverable": True,
+            "error": message,
+            "requested_task": task,
+            "matched_task_id": resolved_task,
+            "available_tasks": _normalize_available_tasks(available),
+            "retry_hint": (
+                "请从 available_tasks 中选择最接近玩家意图的精确 id 或 name，"
+                "然后再次调用 mc_switch_task。不要只口头说明失败。"
+            ),
+            "raw_error": raw_error or {},
+        },
+        "is_error": True,
+        "error": "TASK_SWITCH_RECOVERABLE",
+    }
+
+
+def _normalize_available_tasks(available):
+    tasks = []
+    for item in available or []:
+        if isinstance(item, dict):
+            task_id = str(item.get("id", "") or "")
+            name = str(item.get("name", "") or "")
+        else:
+            task_id = str(item or "")
+            name = ""
+        if task_id or name:
+            tasks.append({"id": task_id, "name": name})
+    return tasks
+
+
+async def _verify_switched_task(plugin, maid_id, expected_task):
+    status_result = await plugin._send_request({"type": "get_maid_status"}, timeout=5)
+    if status_result.get("type") == "error":
+        return {
+            "verified": False,
+            "verification_error": status_result.get("data", {}),
+            "expected_task": expected_task,
+        }
+
+    maids = status_result.get("data", {}).get("maids", [])
+    for maid in maids:
+        if maid.get("id") == maid_id:
+            plugin._maid_status_cache[maid_id] = maid
+            current_task = maid.get("task", "")
+            current_task_name = _task_name_for_id(current_task, maid.get("available_tasks", []))
+            verified = _task_matches(current_task, expected_task)
+            return {
+                "verified": verified,
+                "current_task": current_task,
+                "current_task_name": current_task_name,
+                "expected_task": expected_task,
+                "available_tasks": _normalize_available_tasks(maid.get("available_tasks", [])),
+            }
+
+    return {
+        "verified": False,
+        "verification_error": "Assigned maid was not present in status response",
+        "expected_task": expected_task,
+        "available_tasks": _normalize_available_tasks(
+            maids[0].get("available_tasks", []) if maids else []
+        ),
+    }
+
+
+def _task_matches(current_task, expected_task):
+    current = str(current_task or "").strip().lower()
+    expected = str(expected_task or "").strip().lower()
+    if not current or not expected:
+        return False
+    return current == expected or current.split(":")[-1] == expected.split(":")[-1]
+
+
+def _task_name_for_id(task_id, available):
+    task_id = str(task_id or "")
+    for item in available or []:
+        if isinstance(item, dict) and item.get("id") == task_id:
+            return item.get("name", "")
+    return ""
 
 
 async def do_switch_schedule(plugin, *, schedule="all"):

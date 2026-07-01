@@ -6,12 +6,14 @@
 
 - **结构化游戏内目标板**：`mc_set_plan` 保持旧版 `plan` 文本兼容，同时新增 `title`、`steps`、`completed_steps`、`uncompleted_steps`、`append_steps`、`clear` 参数。
   - Python 插件侧保存当前目标板结构化状态，并渲染为纯文本同步到 Minecraft HUD。
+  - 插件面板新增目标板显示与编辑，可更新标题、追加步骤、标记完成/未完成、清空。
   - 玩家通过 `/neko plan` 设置的文本仍可同步回插件侧，并解析为当前目标板状态。
   - 目标板仅用于当前 Minecraft 会话目标与 HUD/context 注入，不替代 N.E.K.O 宿主的长期记忆或通用任务系统。
 - **模式切换触发增强**：强化 LLM 工具调用策略，解决明确工作请求时只聊天、不切模式的问题。
   - 玩家只说“收菜”等短命令时也应先调用工具，不先口头答应。
   - 玩家先提出具体工作后再说“切换模式/换模式”时，LLM 应承接上一轮工作意图。
   - 不确定具体任务 ID/名称时，先调用 `mc_maid_status` 查看 `available_tasks`，再用精确任务调用 `mc_switch_task`，避免依赖插件静态同义词表。
+  - `mc_switch_task` 成功后会再次查询女仆状态进行验证；失败时返回结构化 `TASK_SWITCH_RECOVERABLE`、`available_tasks` 和重试提示，便于 LLM 立即二次调用精确任务。
 - **陪玩活跃度预设**：新增 `companion_mode` 配置，支持 `quiet`、`standard`、`active`、`custom`。
   - 三种预设只调整女仆主动搭话相关参数：`playmate_quiet_stable_seconds`、`playmate_quiet_cooldown`、`playmate_suggestion_cooldown`。
   - `custom` 只开放这 3 个发言频率参数，不控制 Minecraft 感知频率、活动防抖、消息聚合、防刷屏限流、N.E.K.O 宿主模型、TTS 或全局工具策略。

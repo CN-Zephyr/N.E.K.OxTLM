@@ -23,6 +23,8 @@ class AwarenessManager:
         self._last_maid_player_distance = None
         self._player_nearby = True
         self._last_distance_warn_time = 0
+        self._last_low_durability_warn_time = 0
+        self._last_player_level = None
 
     def start(self):
         if self._task is None or self._task.done():
@@ -108,6 +110,9 @@ class AwarenessManager:
                 "player_on_fire": data.get("player_on_fire", False),
                 "player_is_drowning": data.get("player_is_drowning", False),
                 "player_food_level": data.get("player_food_level", 20),
+                "player_saturation": data.get("player_saturation", 0),
+                "player_experience_level": data.get("player_experience_level", 0),
+                "player_equipment_durability": data.get("player_equipment_durability", []),
                 "light_level": data.get("maid_light_level", 15),
                 "is_underground": data.get("maid_is_underground", False),
                 "maid_inventory": [],
@@ -205,9 +210,10 @@ class AwarenessManager:
                 self._last_drown_warn_time = now
                 changes.append({"text": "玩家在溺水！提醒快上岸！", "urgent": True})
 
-            # === 2.5. Player hunger warning ===
+            # === 2.5. Player hunger warning (with saturation) ===
             player_food = new_state.get("player_food_level", 20)
-            if player_food <= 6 and now - self._last_hunger_warn_time > 300:
+            player_sat = new_state.get("player_saturation", 0)
+            if (player_food <= 6 or (player_food <= 12 and player_sat <= 0)) and now - self._last_hunger_warn_time > 300:
                 self._last_hunger_warn_time = now
                 changes.append({"text": "玩家快饿死了！提醒赶紧吃东西！", "urgent": True})
             elif player_food <= 12 and now - self._last_hunger_warn_time > 600:
@@ -215,6 +221,20 @@ class AwarenessManager:
                 if close_hostile or new_state.get("player_on_fire") or new_state.get("player_is_drowning"):
                     self._last_hunger_warn_time = now
                     changes.append({"text": "玩家饥饿值偏低，而且还在危险中，提醒注意补给！", "urgent": False})
+
+            # === 2.6. Player equipment durability warning ===
+            equipment = new_state.get("player_equipment_durability", [])
+            low_durability = [e for e in equipment if e.get("durability_ratio", 1) < 0.15]
+            if low_durability and now - self._last_low_durability_warn_time > 300:
+                self._last_low_durability_warn_time = now
+                parts = [f"{e.get('item', '').split(':')[-1]}({int(e.get('durability_ratio', 0) * 100)}%)" for e in low_durability[:3]]
+                changes.append({"text": f"玩家装备快坏了！{', '.join(parts)}", "urgent": True})
+
+            # === 2.7. Player level up ===
+            new_level = new_state.get("player_experience_level", 0)
+            if self._last_player_level is not None and new_level > self._last_player_level:
+                changes.append({"text": f"玩家升级到{new_level}级了！", "urgent": False})
+            self._last_player_level = new_level
 
             # === 3. Maid inventory context ===
             new_inventory = new_state["maid_inventory"]

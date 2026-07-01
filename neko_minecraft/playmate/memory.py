@@ -20,10 +20,19 @@ class MinecraftShortTermMemory:
         text = self._normalize(summary)
         if not text:
             return None
+        ts = timestamp or time.time()
+        item_kind = str(kind or "context")
+        item_priority = int(priority or 0)
+        if self._items:
+            last = self._items[-1]
+            if last.kind == item_kind and last.summary == text:
+                last.timestamp = ts
+                last.priority = max(last.priority, item_priority)
+                return last
         item = MinecraftMemoryItem(
-            timestamp=timestamp or time.time(),
-            kind=str(kind or "context"),
-            priority=int(priority or 0),
+            timestamp=ts,
+            kind=item_kind,
+            priority=item_priority,
             summary=text,
         )
         self._items.append(item)

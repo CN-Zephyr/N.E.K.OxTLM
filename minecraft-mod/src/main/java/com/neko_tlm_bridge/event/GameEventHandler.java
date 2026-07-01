@@ -88,16 +88,18 @@ public class GameEventHandler {
         float lastHealth;
         float lastMaxHealth;
         boolean includesMaid;
+        String lastDamageType;
 
         BehaviorAggregate(String eventType) {
             this.eventType = eventType;
         }
 
-        void recordHurt(String targetName, boolean maid, float damage, float health, float maxHealth, String attacker, long tick) {
+        void recordHurt(String targetName, boolean maid, float damage, float health, float maxHealth, String attacker, String damageType, long tick) {
             beginIfNeeded(tick);
             targets.put(targetName, targets.getOrDefault(targetName, 0) + 1);
             lastTarget = targetName;
             lastAttacker = attacker;
+            lastDamageType = damageType;
             endTick = tick;
             count++;
             totalDamage += damage;
@@ -204,10 +206,12 @@ public class GameEventHandler {
                     Math.max(0, player.getHealth() - event.getAmount()),
                     player.getMaxHealth(),
                     attackerName(event),
+                    event.getSource().getMsgId(),
                     player.level().getGameTime()
             );
         } else if (entity instanceof EntityMaid maid) {
             if (!monitoredMaidId.isEmpty() && !monitoredMaidId.equals(maid.getStringUUID())) return;
+            String damageType = event.getSource().getMsgId();
             JsonObject eventData = new JsonObject();
             eventData.addProperty("event_type", Protocol.EVENT_MAID_HURT);
             eventData.addProperty("maid_id", maid.getStringUUID());
@@ -216,6 +220,7 @@ public class GameEventHandler {
             eventData.addProperty("health", Math.max(0, maid.getHealth() - event.getAmount()));
             eventData.addProperty("max_health", maid.getMaxHealth());
             eventData.addProperty("attacker", attackerName(event));
+            eventData.addProperty("damage_type", damageType);
             webSocketServer.broadcastEvent(eventData);
             hurtAggregate.recordHurt(
                     maid.getName().getString(),
@@ -224,6 +229,7 @@ public class GameEventHandler {
                     Math.max(0, maid.getHealth() - event.getAmount()),
                     maid.getMaxHealth(),
                     attackerName(event),
+                    damageType,
                     maid.level().getGameTime()
             );
         }
@@ -232,8 +238,9 @@ public class GameEventHandler {
     @SubscribeEvent
     public static void onServerChat(ServerChatEvent event) {
         if (!ModConfig.EVENT_PUSH_ENABLED.get() || webSocketServer == null || !webSocketServer.hasClients()) return;
-        String message = event.getRawText();
         net.minecraft.server.level.ServerPlayer player = event.getPlayer();
+        if (trackedOwnerMaid(player) == null) return;
+        String message = event.getRawText();
         JsonObject chatData = new JsonObject();
         chatData.addProperty("event_type", "chat");
         chatData.addProperty("sender", player.getName().getString());
@@ -697,6 +704,7 @@ public class GameEventHandler {
             eventData.addProperty("last_max_health", aggregate.lastMaxHealth);
             eventData.addProperty("last_target", aggregate.lastTarget);
             eventData.addProperty("last_attacker", aggregate.lastAttacker);
+            eventData.addProperty("last_damage_type", aggregate.lastDamageType == null ? "" : aggregate.lastDamageType);
             eventData.addProperty("includes_maid", aggregate.includesMaid);
         } else if (Protocol.EVENT_PLAYER_KILL_ENTITY.equals(aggregate.eventType)) {
             eventData.addProperty("player_name", aggregate.playerName);
@@ -809,18 +817,42 @@ public class GameEventHandler {
         int mining = 0;
         int gathering = 0;
         for (Map.Entry<String, Integer> entry : aggregate.blocks.entrySet()) {
-            String block = entry.getKey();
+            String blockId = entry.getKey();
             int count = entry.getValue();
-            if (block.contains("ore") || block.contains("stone") || block.contains("deepslate") || block.contains("netherrack") || block.contains("tuff")) {
+            String tool = inferToolType(blockId);
+            if ("pickaxe".equals(tool)) {
                 mining += count;
-            }
-            if (block.contains("log") || block.contains("leaves") || block.contains("dirt") || block.contains("sand") || block.contains("gravel")) {
+            } else if ("axe".equals(tool) || "shovel".equals(tool)) {
                 gathering += count;
+            } else {
+                if (blockId.contains("ore") || blockId.contains("stone") || blockId.contains("deepslate") || blockId.contains("netherrack") || blockId.contains("tuff")) {
+                    mining += count;
+                }
+                if (blockId.contains("log") || blockId.contains("leaves") || blockId.contains("dirt") || blockId.contains("sand") || blockId.contains("gravel")) {
+                    gathering += count;
+                }
             }
         }
         if (mining >= Math.max(2, aggregate.count / 2)) return "mining";
         if (gathering >= Math.max(2, aggregate.count / 2)) return "gathering";
         return "digging";
+    }
+
+    private static String inferToolType(String blockId) {
+        try {
+            net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(blockId);
+            if (rl == null) return "none";
+            var holder = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getHolder(rl).orElse(null);
+            if (holder == null) return "none";
+            var state = holder.value().defaultBlockState();
+            if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE)) return "pickaxe";
+            if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_AXE)) return "axe";
+            if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_SHOVEL)) return "shovel";
+            if (state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_HOE)) return "hoe";
+            return "none";
+        } catch (Exception e) {
+            return "none";
+        }
     }
 
     // ── Chess game detection ──

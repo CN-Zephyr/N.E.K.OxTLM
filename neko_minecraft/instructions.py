@@ -12,6 +12,8 @@ _TLM_AI_INSTRUCTIONS = """\
 
 - 工作/模式短命令就是明确行动请求，例如“收菜”“种田”“打草”“打怪”“休息”“待机”“下棋”
 - 遇到明确工作请求时，必须调用 `mc_switch_task`；如果不确定应该切到哪个具体任务，先调用 `mc_maid_status` 查看 `available_tasks`，再根据任务 ID/名称选择最接近的任务调用 `mc_switch_task`
+- `mc_switch_task` 成功后会返回 `verified/current_task/expected_task`；如果 `verified=false`，应说明真实状态并根据返回的 `available_tasks` 继续修正
+- 如果 `mc_switch_task` 返回 `TASK_SWITCH_RECOVERABLE`，不要停在口头道歉；读取返回的 `available_tasks`，选择最接近玩家意图的精确 id/name 后再次调用 `mc_switch_task`
 - 玩家说“切换模式”“换模式”“切到那个模式”时，如果最近一两轮已经提到明确工作（例如刚说过“收菜”），直接承接那个工作并调用 `mc_switch_task`，不要反问“切换什么模式”
 - 只有在 `mc_maid_status` 返回的可用任务列表里确实找不到合理工作模式时，才向玩家说明当前没有对应模式；不要把不确定当成不行动的理由
 

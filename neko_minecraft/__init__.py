@@ -46,6 +46,16 @@ def _event_coalesce_key(event_type):
     return _EVENT_COALESCE_KEYS.get(event_type)
 
 
+def _parse_step_index(value):
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        return [int(value)]
+    except Exception:
+        return None
+
+
 @neko_plugin
 class NekoMinecraftPlugin(NekoPluginBase):
 
@@ -435,6 +445,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "command_execution_enabled": self._command_execution_enabled,
             "companion_mode": self._companion_mode,
             "companion_settings": _config.companion_settings(self),
+            "plan_state": self._plan_state,
+            "plan_summary": _plan.plan_summary(self._plan_state),
             "last_diagnostic": self._last_diagnostic,
         }
 
@@ -507,6 +519,36 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "companion_mode": mode,
             "companion_settings": _config.companion_settings(self),
         })
+
+    @ui.action(id="set_plan_board", label=tr("actions.setPlanBoard", default="Update Goal Board"), tone="primary", refresh_context=True)
+    @plugin_entry(
+        id="set_plan_board",
+        name=tr("entries.setPlanBoard.name", default="Update Goal Board"),
+        description="Update the plugin-side Minecraft goal board shown in the HUD. This is a bridge-local board, not the N.E.K.O host task system.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Goal board title"},
+                "append_step": {"type": "string", "description": "Single step to append"},
+                "completed_step": {"type": "string", "description": "1-based step number to mark done"},
+                "uncompleted_step": {"type": "string", "description": "1-based step number to mark pending"},
+                "clear": {"type": "boolean", "description": "Clear the current board"},
+            },
+        },
+        llm_result_fields=["success", "title", "total_steps", "completed_steps", "pending_steps", "plan"],
+    )
+    async def set_plan_board(self, *, title=None, append_step="", completed_step="", uncompleted_step="", clear=False, **_):
+        completed_steps = _parse_step_index(completed_step)
+        uncompleted_steps = _parse_step_index(uncompleted_step)
+        append_steps = [append_step] if str(append_step or "").strip() else None
+        return await _tools.do_set_plan(
+            self,
+            title=title,
+            append_steps=append_steps,
+            completed_steps=completed_steps,
+            uncompleted_steps=uncompleted_steps,
+            clear=bool(clear),
+        )
 
     # ── LLM Tools ──
 

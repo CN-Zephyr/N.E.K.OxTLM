@@ -139,6 +139,8 @@ graph LR
 | `switch_schedule` | `{"schedule": "DAY/NIGHT/ALL"}`      | 切换日程模式  |
 | `equip_item`      | `{"slot": 槽位号}` 或 `{"item": "物品ID"}` | 装备物品到主手 |
 
+Python 插件侧的 `mc_switch_task` 会在命令返回成功后再次查询 `get_maid_status`，用 `verified/current_task/expected_task` 确认女仆实际任务是否切换成功。若任务名无法匹配或 mod 端拒绝切换，工具会返回结构化的 `TASK_SWITCH_RECOVERABLE`，包含 `available_tasks` 和 `retry_hint`，LLM 应选择精确任务 ID/名称后立即重试。
+
 #### get\_game\_context 支持的类别
 
 | category          | 说明               |
@@ -252,7 +254,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 主动建议触发 | 根据场景（暗处缺火把、挖矿缺光、建造有材料、钓鱼/赶路/整理/刷怪等）生成一句话建议 |
 | 小游戏陪伴 | 棋局事件（五子棋/国际象棋/中国象棋）特殊处理，含冷却和上下文裁剪 |
 | 短期共同目标 | 当前会话内维护"正在一起做什么"，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
-| 游戏内目标板 | 在 Minecraft 右上角 HUD 显示当前 Minecraft 目标与步骤。LLM 通过 `mc_set_plan(title, steps, completed_steps, append_steps)` 维护结构化状态，插件发送纯文本给 HUD；玩家仍可通过 `/neko plan` 命令直接设置文本 |
+| 游戏内目标板 | 在 Minecraft 右上角 HUD 显示当前 Minecraft 目标与步骤。LLM 通过 `mc_set_plan(title, steps, completed_steps, append_steps)` 维护结构化状态，插件发送纯文本给 HUD；插件面板可查看、改标题、追加步骤、标记完成/未完成、清空；玩家仍可通过 `/neko plan` 命令直接设置文本 |
 | 陪玩调试日志 | 可选记录事件路由、活动变化、quiet/suggestion/push 触发原因到插件 `log` 目录，便于实测调参 |
 | 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
 | 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |

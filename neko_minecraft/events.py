@@ -151,6 +151,33 @@ def _dimension_label(dim_id):
     }.get(dim_id, dim_id.split(":")[-1])
 
 
+_DAMAGE_TYPE_HINTS = {
+    "fall": "摔伤了",
+    "lava": "碰到岩浆了",
+    "inFire": "被火烧了",
+    "onFire": "被火烧了",
+    "drown": "溺水了",
+    "magic": "被魔法击中",
+    "cactus": "被仙人掌扎了",
+    "starve": "饿到了",
+    "outOfWorld": "掉进虚空了",
+    "lightningBolt": "被雷劈了",
+    "hotFloor": "踩到岩浆块了",
+    "sweetBerryBush": "被甜浆果丛扎了",
+    "sting": "被蛰了",
+    "wither": "被凋零效果伤害",
+    "dragonBreath": "被龙息喷到",
+    "flyIntoWall": "撞墙了",
+    "freeze": "被冻伤了",
+    "fallingStalactite": "被钟乳石砸了",
+    "stalagmite": "被钟乳石刺到了",
+}
+
+
+def _damage_type_hint(damage_type):
+    return _DAMAGE_TYPE_HINTS.get(damage_type, "")
+
+
 def format_event(event_data, assigned_maid_id):
     """格式化事件数据，返回 (parts_text, priority, side_effects) 元组。
 
@@ -188,8 +215,10 @@ def format_event(event_data, assigned_maid_id):
                 f"（你就是「{maid_name}」）。即时情绪：害怕、委屈但还想撑住，适合短句求助或撒娇式抱怨。"
             )
         else:
+            cause_hint = _damage_type_hint(event_data.get("damage_type", ""))
+            cause_text = f"{cause_hint}，" if cause_hint else ""
             parts_text = (
-                f"好痛！{damage_detail}，{health_detail}"
+                f"好痛！{cause_text}{damage_detail}，{health_detail}"
                 f"（你就是「{maid_name}」）。即时情绪：有点受惊和委屈，适合短句表达痛感，不要长篇解释。"
             )
     elif event_type == "player_hurt":
@@ -205,6 +234,11 @@ def format_event(event_data, assigned_maid_id):
         attacker_text = f"，最近来源是{last_attacker}" if last_attacker else ""
         health_text = f"，当前血量约{last_health}/{last_max_health}" if last_health != "" and last_max_health != "" else ""
         parts_text = f"{target_text}刚刚连续受到{count}次伤害，总计约{total_damage}点{attacker_text}{health_text}。"
+        last_damage_type = event_data.get("last_damage_type", "")
+        if not last_attacker and last_damage_type:
+            cause_hint = _damage_type_hint(last_damage_type)
+            if cause_hint:
+                parts_text += f"（最近伤害：{cause_hint}）"
         try:
             low_health = float(last_health) <= float(last_max_health) * 0.45 if last_health != "" and last_max_health != "" else False
         except Exception:

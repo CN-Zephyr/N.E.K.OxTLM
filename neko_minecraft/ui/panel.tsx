@@ -37,7 +37,28 @@ type State = {
   command_execution_enabled: boolean
   companion_mode: string
   companion_settings: Record<string, number>
+  plan_state: PlanState
+  plan_summary: PlanSummary
   last_diagnostic?: DiagnosticResult | null
+}
+
+type PlanStep = {
+  text: string
+  done: boolean
+}
+
+type PlanState = {
+  title: string
+  steps: PlanStep[]
+  updated_at: number
+}
+
+type PlanSummary = {
+  title: string
+  total_steps: number
+  completed_steps: number
+  pending_steps: number
+  plan: string
 }
 
 type DiagnosticCheck = {
@@ -63,9 +84,14 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const commandExecutionEnabled = state?.command_execution_enabled ?? false
   const companionMode = state?.companion_mode ?? "custom"
   const companionSettings = state?.companion_settings ?? {}
+  const planState = state?.plan_state ?? { title: "", steps: [], updated_at: 0 }
+  const planSummary = state?.plan_summary ?? { title: "", total_steps: 0, completed_steps: 0, pending_steps: 0, plan: "" }
   const diagnostic = state?.last_diagnostic ?? null
 
   const [selectedMaidId, setSelectedMaidId] = useLocalState<string>("selectedMaidId", "")
+  const [planTitle, setPlanTitle] = useState<string>(planState.title || "")
+  const [planAppendStep, setPlanAppendStep] = useState<string>("")
+  const [selectedPlanStep, setSelectedPlanStep] = useState<string>("")
   const settingText = (key: string) => String(companionSettings[key] ?? "")
   const [selectedCompanionMode, setSelectedCompanionMode] = useState<string>(companionMode)
   const [customQuietStableSeconds, setCustomQuietStableSeconds] = useState<string>(settingText("playmate_quiet_stable_seconds"))
@@ -84,10 +110,16 @@ export default function Panel(props: PluginSurfaceProps<State>) {
     companionSettings.playmate_suggestion_cooldown,
   ])
 
+  useEffect(() => {
+    setPlanTitle(planState.title || "")
+    setSelectedPlanStep("")
+  }, [planState.title, planState.steps.length, planState.updated_at])
+
   const assignAction = actions.find((a) => a.id === "assign_maid") as HostedAction | undefined
   const refreshAction = actions.find((a) => a.id === "refresh_maid_status") as HostedAction | undefined
   const diagnoseAction = actions.find((a) => a.id === "diagnose_bridge") as HostedAction | undefined
   const setCompanionModeAction = actions.find((a) => a.id === "set_companion_mode") as HostedAction | undefined
+  const setPlanBoardAction = actions.find((a) => a.id === "set_plan_board") as HostedAction | undefined
 
   const companionModeOptions = ["quiet", "standard", "active", "custom"].map((mode) => ({
     value: mode,
@@ -112,6 +144,13 @@ export default function Panel(props: PluginSurfaceProps<State>) {
 
   const assignedMaid = maids.find((m) => m.id === assignedId)
   const selectedMaid = maids.find((m) => m.id === selectedMaidId)
+  const planStepOptions = [
+    { value: "", label: t("plan.selectStep") },
+    ...planState.steps.map((step, index) => ({
+      value: String(index + 1),
+      label: `${index + 1}. ${step.done ? t("plan.done") : t("plan.pending")} ${step.text}`,
+    })),
+  ]
 
   if (state == null) {
     return (
@@ -204,6 +243,98 @@ export default function Panel(props: PluginSurfaceProps<State>) {
           </Stack>
         </Card>
       )}
+
+      <Card title={t("plan.title")}>
+        <Stack>
+          {planSummary.total_steps > 0 || planState.title ? (
+            <Stack>
+              <KeyValue
+                items={[
+                  { key: t("plan.boardTitle"), value: planState.title || "-" },
+                  { key: t("plan.progress"), value: `${planSummary.completed_steps}/${planSummary.total_steps}` },
+                ]}
+              />
+              {planState.steps.length > 0 && (
+                <KeyValue
+                  items={planState.steps.map((step, index) => ({
+                    key: `${index + 1}. ${step.done ? t("plan.done") : t("plan.pending")}`,
+                    value: step.text,
+                  }))}
+                />
+              )}
+            </Stack>
+          ) : (
+            <EmptyState title={t("plan.emptyTitle")} description={t("plan.emptyDescription")} />
+          )}
+
+          {setPlanBoardAction && (
+            <Stack>
+              <Divider />
+              <Field label={t("plan.fields.title")}>
+                <Input value={planTitle} onChange={setPlanTitle} />
+              </Field>
+              <ActionButton
+                action={setPlanBoardAction}
+                values={{ title: planTitle }}
+              >
+                {t("actions.updatePlanTitle")}
+              </ActionButton>
+
+              <Field label={t("plan.fields.appendStep")}>
+                <Input value={planAppendStep} onChange={setPlanAppendStep} />
+              </Field>
+              {planAppendStep.trim() && (
+                <ActionButton
+                  action={setPlanBoardAction}
+                  values={{ append_step: planAppendStep }}
+                  onResult={() => setPlanAppendStep("")}
+                >
+                  {t("actions.appendPlanStep")}
+                </ActionButton>
+              )}
+
+              {planState.steps.length > 0 && (
+                <Stack>
+                  <Field label={t("plan.fields.step")}>
+                    <Select
+                      options={planStepOptions}
+                      value={selectedPlanStep}
+                      onChange={setSelectedPlanStep}
+                    />
+                  </Field>
+                  <Stack direction="horizontal">
+                    {selectedPlanStep && (
+                      <ActionButton
+                        action={setPlanBoardAction}
+                        values={{ completed_step: selectedPlanStep }}
+                      >
+                        {t("actions.completePlanStep")}
+                      </ActionButton>
+                    )}
+                    {selectedPlanStep && (
+                      <ActionButton
+                        action={setPlanBoardAction}
+                        values={{ uncompleted_step: selectedPlanStep }}
+                      >
+                        {t("actions.reopenPlanStep")}
+                      </ActionButton>
+                    )}
+                  </Stack>
+                </Stack>
+              )}
+              {(planSummary.total_steps > 0 || planState.title) && (
+                <ActionButton
+                  action={setPlanBoardAction}
+                  values={{ clear: true }}
+                  confirm={t("plan.clearConfirm")}
+                >
+                  {t("actions.clearPlan")}
+                </ActionButton>
+              )}
+            </Stack>
+          )}
+        </Stack>
+      </Card>
 
       <Card title={t("command.title")}>
         <Stack>
