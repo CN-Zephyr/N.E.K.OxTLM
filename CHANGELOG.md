@@ -12,6 +12,12 @@
   - 玩家只说“收菜”等短命令时也应先调用工具，不先口头答应。
   - 玩家先提出具体工作后再说“切换模式/换模式”时，LLM 应承接上一轮工作意图。
   - 不确定具体任务 ID/名称时，先调用 `mc_maid_status` 查看 `available_tasks`，再用精确任务调用 `mc_switch_task`，避免依赖插件静态同义词表。
+- **陪玩活跃度预设**：新增 `companion_mode` 配置，支持 `quiet`、`standard`、`active`、`custom`。
+  - 三种预设只调整本插件的 Minecraft 感知、quiet/suggestion 冷却和 push 节流，不控制 N.E.K.O 宿主模型、TTS 或全局工具策略。
+  - `custom` 保留原有手动调参行为。
+- **桥接诊断**：新增 `diagnose_bridge` action/entry 和面板按钮。
+  - 检查 Java/Minecraft 进程、WebSocket、mod 配置、聊天显示、女仆状态和已指定女仆。
+  - 明确诊断范围只覆盖本插件与 Minecraft mod 的桥接边界。
 
 ## v1.0.4 (2026-06-15)（暂未发布Releases）
 

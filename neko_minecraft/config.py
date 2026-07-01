@@ -5,6 +5,51 @@ import json
 from . import plan as _plan
 
 
+COMPANION_MODE_PRESETS = {
+    "quiet": {
+        "awareness_interval": 15,
+        "playmate_activity_cooldown": 240,
+        "playmate_quiet_stable_seconds": 240,
+        "playmate_quiet_cooldown": 900,
+        "playmate_aggregate_window": 12,
+        "playmate_throttle_window": 60,
+        "playmate_throttle_limit": 3,
+        "playmate_suggestion_cooldown": 1500,
+    },
+    "standard": {
+        "awareness_interval": 5,
+        "playmate_activity_cooldown": 120,
+        "playmate_quiet_stable_seconds": 90,
+        "playmate_quiet_cooldown": 300,
+        "playmate_aggregate_window": 8,
+        "playmate_throttle_window": 30,
+        "playmate_throttle_limit": 6,
+        "playmate_suggestion_cooldown": 600,
+    },
+    "active": {
+        "awareness_interval": 3,
+        "playmate_activity_cooldown": 60,
+        "playmate_quiet_stable_seconds": 45,
+        "playmate_quiet_cooldown": 150,
+        "playmate_aggregate_window": 4,
+        "playmate_throttle_window": 30,
+        "playmate_throttle_limit": 10,
+        "playmate_suggestion_cooldown": 240,
+    },
+}
+
+COMPANION_CUSTOM_FIELDS = [
+    "awareness_interval",
+    "playmate_activity_cooldown",
+    "playmate_quiet_stable_seconds",
+    "playmate_quiet_cooldown",
+    "playmate_aggregate_window",
+    "playmate_throttle_window",
+    "playmate_throttle_limit",
+    "playmate_suggestion_cooldown",
+]
+
+
 def _write_toml_value(v):
     if isinstance(v, str):
         return f'"{v}"'
@@ -66,8 +111,13 @@ def load_config(plugin):
                 plugin._assigned_maid_id = bridge.get("assigned_maid_id", "")
                 plugin._assigned_maid_name = bridge.get("assigned_maid_name", "")
                 plugin._awareness_interval = bridge.get("awareness_interval", plugin._awareness_interval)
+                plugin._companion_mode = _normalize_companion_mode(
+                    bridge.get("companion_mode", plugin._companion_mode),
+                    plugin,
+                )
                 _load_plan_config(plugin, bridge)
                 _load_playmate_config(plugin, bridge)
+                _apply_companion_mode(plugin)
                 return
         except Exception as e:
             plugin.logger.warning(f"Failed to load plugin.toml: {e}")
@@ -84,8 +134,13 @@ def load_config(plugin):
             plugin._assigned_maid_id = config.get("assigned_maid_id", "")
             plugin._assigned_maid_name = config.get("assigned_maid_name", "")
             plugin._awareness_interval = config.get("awareness_interval", plugin._awareness_interval)
+            plugin._companion_mode = _normalize_companion_mode(
+                config.get("companion_mode", plugin._companion_mode),
+                plugin,
+            )
             _load_plan_config(plugin, config)
             _load_playmate_config(plugin, config)
+            _apply_companion_mode(plugin)
     except Exception as e:
         plugin.logger.warning(f"Failed to load config: {e}")
 
@@ -123,6 +178,48 @@ def _load_playmate_config(plugin, config):
     plugin._playmate_debug_log_max_bytes = config.get("playmate_debug_log_max_bytes", plugin._playmate_debug_log_max_bytes)
 
 
+def _normalize_companion_mode(mode, plugin=None):
+    mode = str(mode or "custom").strip().lower()
+    if mode in ("quiet", "standard", "active", "custom"):
+        return mode
+    if plugin:
+        plugin.logger.warning(f"Unknown companion_mode '{mode}', falling back to custom")
+    return "custom"
+
+
+def _apply_companion_mode(plugin):
+    mode = _normalize_companion_mode(getattr(plugin, "_companion_mode", "custom"), plugin)
+    plugin._companion_mode = mode
+    preset = COMPANION_MODE_PRESETS.get(mode)
+    if not preset:
+        return
+    for key, value in preset.items():
+        setattr(plugin, f"_{key}", value)
+
+
+def _coerce_custom_int(value, fallback, minimum=1):
+    try:
+        number = int(str(value).strip())
+    except Exception:
+        return fallback
+    return max(minimum, number)
+
+
+def apply_custom_companion_settings(plugin, values):
+    for key in COMPANION_CUSTOM_FIELDS:
+        if key not in values:
+            continue
+        current = getattr(plugin, f"_{key}", 1)
+        setattr(plugin, f"_{key}", _coerce_custom_int(values.get(key), current))
+
+
+def companion_settings(plugin):
+    return {
+        key: getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
+        for key in COMPANION_CUSTOM_FIELDS
+    }
+
+
 def save_config(plugin):
     toml_path = plugin.config_dir / "plugin.toml"
     try:
@@ -142,6 +239,9 @@ def save_config(plugin):
         existing.setdefault("minecraft_bridge", {})
         existing["minecraft_bridge"]["assigned_maid_id"] = plugin._assigned_maid_id
         existing["minecraft_bridge"]["assigned_maid_name"] = plugin._assigned_maid_name
+        existing["minecraft_bridge"]["companion_mode"] = getattr(plugin, "_companion_mode", "custom")
+        for key in COMPANION_CUSTOM_FIELDS:
+            existing["minecraft_bridge"][key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
         existing["minecraft_bridge"]["current_plan"] = getattr(plugin, "_current_plan_text", "")
         existing["minecraft_bridge"]["structured_plan"] = _plan.normalize_plan_state(
             getattr(plugin, "_plan_state", {})
@@ -178,6 +278,9 @@ def save_config(plugin):
                 config = json.load(f)
         config["assigned_maid_id"] = plugin._assigned_maid_id
         config["assigned_maid_name"] = plugin._assigned_maid_name
+        config["companion_mode"] = getattr(plugin, "_companion_mode", "custom")
+        for key in COMPANION_CUSTOM_FIELDS:
+            config[key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
         config["current_plan"] = getattr(plugin, "_current_plan_text", "")
         config["structured_plan"] = _plan.normalize_plan_state(getattr(plugin, "_plan_state", {}))
         with open(config_path, "w", encoding="utf-8") as f:

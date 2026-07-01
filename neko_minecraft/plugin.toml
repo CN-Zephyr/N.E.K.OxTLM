@@ -55,6 +55,18 @@ name = "Assign Maid"
 description = "Assign a specific maid by ID for the AI to control"
 kind = "action"
 
+[[plugin.entries]]
+id = "diagnose_bridge"
+name = "Diagnose Minecraft Bridge"
+description = "Diagnose Minecraft bridge connection, mod config, and assigned maid state"
+kind = "action"
+
+[[plugin.entries]]
+id = "set_companion_mode"
+name = "Set Companion Activity"
+description = "Set this plugin's Minecraft companion activity preset"
+kind = "action"
+
 [minecraft_bridge]
 ws_url = "ws://127.0.0.1:48920"
 heartbeat_interval = 30
@@ -62,6 +74,7 @@ reconnect_interval = 5
 max_reconnect_interval = 60
 assigned_maid_id = ""
 assigned_maid_name = ""
+companion_mode = "standard"
 awareness_interval = 5
 playmate_memory_items = 24
 playmate_memory_summary_length = 120

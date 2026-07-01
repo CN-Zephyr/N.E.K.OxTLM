@@ -271,9 +271,12 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | `heartbeat_interval` | `30` | 心跳间隔，单位秒 |
 | `reconnect_interval` | `5` | 断线重连间隔，单位秒 |
 | `max_reconnect_interval` | `60` | 最大重连间隔，单位秒 |
+| `companion_mode` | `standard` | 陪玩活跃度预设：`quiet` 安静、`standard` 标准、`active` 活跃、`custom` 自定义 |
 | `awareness_interval` | `5` | awareness 轮询间隔，单位秒 |
 
 #### 陪玩系统配置
+
+当 `companion_mode` 为 `quiet`、`standard` 或 `active` 时，插件会覆盖下方部分频率/冷却参数；当 `companion_mode = "custom"` 时，完全使用手动配置。该模式只影响本插件的 Minecraft 感知、陪玩 push、quiet/suggestion 触发频率，不控制 N.E.K.O 宿主的模型、TTS 或全局工具调用策略。
 
 | 配置项 | 默认值 | 说明 |
 | ------ | ------ | ---- |
@@ -293,6 +296,10 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | `playmate_suggestion_cooldown` | `600` | 轻量主动建议冷却时间，单位秒 |
 | `playmate_debug_log_enabled` | `false` | 是否启用陪玩调试日志 |
 | `playmate_debug_log_max_bytes` | `262144` | `log/playmate_debug.log` 最大大小，超出后保留尾部内容 |
+
+#### 桥接诊断
+
+插件面板提供“诊断桥接”动作，也可通过 `diagnose_bridge` entry 调用。诊断范围包括 Java/Minecraft 进程、WebSocket 连接、Minecraft mod 配置、聊天显示开关、女仆状态和已指定女仆。该诊断只覆盖本插件与 Minecraft mod 的桥接边界；N.E.K.O 宿主模型、TTS、全局工具调用偏置需在宿主侧检查。
 
 ## 游戏内指令
 
@@ -357,6 +364,7 @@ neko_minecraft/
 ├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
 ├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级 + 棋局局面描述）
 ├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
+├── diagnostics.py       # 桥接诊断（连接、mod 配置、女仆状态、宿主边界提示）
 ├── plan.py              # 当前 Minecraft 目标板结构化状态、文本解析与 HUD 文本渲染
 ├── playmate/            # 陪玩式感知增强
 │   ├── __init__.py      # 子包导出入口

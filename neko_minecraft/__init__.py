@@ -15,6 +15,7 @@ from .bridge import WSBridge
 from . import config as _config
 from . import events as _events
 from . import plan as _plan
+from . import diagnostics as _diagnostics
 from .awareness import AwarenessManager
 from . import tools as _tools
 from .playmate import PlaymateContextManager, MinecraftPushRouter
@@ -65,6 +66,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._chat_bubble_enabled = True
         self._chat_box_enabled = True
         self._instructions_injected = False
+        self._companion_mode = "custom"
         self._awareness_interval = 60
         self._playmate_memory_items = 24
         self._playmate_memory_summary_length = 120
@@ -84,6 +86,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._playmate_debug_log_max_bytes = 262144
         self._current_plan_text = ""
         self._plan_state = _plan.empty_plan()
+        self._last_diagnostic = None
         self._playmate_debug = PlaymateDebugLogger(self)
         self._minecraft_push = MinecraftPushRouter(self)
         self._playmate = PlaymateContextManager(self)
@@ -430,6 +433,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "assigned_maid_id": self._assigned_maid_id,
             "assigned_maid_name": self._assigned_maid_name,
             "command_execution_enabled": self._command_execution_enabled,
+            "companion_mode": self._companion_mode,
+            "companion_settings": _config.companion_settings(self),
+            "last_diagnostic": self._last_diagnostic,
         }
 
     @ui.action(id="refresh_maid_status", label=tr("actions.refresh", default="Refresh Status"), tone="primary", refresh_context=True)
@@ -457,6 +463,55 @@ class NekoMinecraftPlugin(NekoPluginBase):
         if self._bridge and self._bridge.connected and maid_id:
             self._bridge.send({"type": "set_monitored_maid", "data": {"maid_id": maid_id}})
         return Ok({"assigned_maid_id": maid_id, "assigned_maid_name": maid_name})
+
+    @ui.action(id="diagnose_bridge", label=tr("actions.diagnose", default="Diagnose Bridge"), tone="primary", refresh_context=True)
+    @plugin_entry(id="diagnose_bridge", name=tr("entries.diagnose.name", default="Diagnose Minecraft Bridge"), description="Diagnose the Minecraft bridge connection, mod config, assigned maid, and plugin-side companion mode. This does not diagnose N.E.K.O host model/TTS behavior.", input_schema={"type": "object", "properties": {}}, llm_result_fields=["status", "summary", "checks"])
+    async def diagnose_bridge(self, **_):
+        result = await _diagnostics.diagnose_bridge(self)
+        self._last_diagnostic = result
+        return Ok(result)
+
+    @ui.action(id="set_companion_mode", label=tr("actions.setCompanionMode", default="Apply Mode"), tone="primary", refresh_context=True)
+    @plugin_entry(
+        id="set_companion_mode",
+        name=tr("entries.setCompanionMode.name", default="Set Companion Mode"),
+        description="Set plugin-side Minecraft companion activity preset. Custom fields only affect this plugin's Minecraft awareness/push/cooldown behavior, not N.E.K.O host model or TTS behavior.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "mode": {"type": "string", "enum": ["quiet", "standard", "active", "custom"], "description": "Companion activity preset"},
+                "awareness_interval": {"type": "string", "description": "Seconds between active Minecraft awareness checks"},
+                "playmate_activity_cooldown": {"type": "string", "description": "Seconds before activity inference can push again"},
+                "playmate_quiet_stable_seconds": {"type": "string", "description": "Seconds of stable quiet state before quiet handling"},
+                "playmate_quiet_cooldown": {"type": "string", "description": "Seconds between quiet-state proactive pushes"},
+                "playmate_aggregate_window": {"type": "string", "description": "Seconds to aggregate low priority Minecraft events"},
+                "playmate_throttle_window": {"type": "string", "description": "Seconds for proactive push throttle window"},
+                "playmate_throttle_limit": {"type": "string", "description": "Maximum proactive pushes in the throttle window"},
+                "playmate_suggestion_cooldown": {"type": "string", "description": "Seconds between suggestion pushes"},
+            },
+            "required": ["mode"],
+        },
+        llm_result_fields=["companion_mode", "companion_settings"],
+    )
+    async def set_companion_mode(self, *, mode="", **kwargs):
+        mode = _config._normalize_companion_mode(mode, self)
+        self._companion_mode = mode
+        _config._apply_companion_mode(self)
+        if mode == "custom":
+            _config.apply_custom_companion_settings(self, kwargs)
+        was_awareness_running = bool(self._awareness and self._awareness._task and not self._awareness._task.done())
+        if was_awareness_running:
+            self._awareness.stop()
+        await self._minecraft_push.flush()
+        self._refresh_playmate_modules()
+        if was_awareness_running:
+            self._awareness.start()
+        self._save_config()
+        self.logger.info(f"[Config] Companion mode set to {mode}")
+        return Ok({
+            "companion_mode": mode,
+            "companion_settings": _config.companion_settings(self),
+        })
 
     # ── LLM Tools ──
 
