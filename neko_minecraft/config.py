@@ -2,6 +2,8 @@
 
 import json
 
+from . import plan as _plan
+
 
 def _write_toml_value(v):
     if isinstance(v, str):
@@ -64,6 +66,7 @@ def load_config(plugin):
                 plugin._assigned_maid_id = bridge.get("assigned_maid_id", "")
                 plugin._assigned_maid_name = bridge.get("assigned_maid_name", "")
                 plugin._awareness_interval = bridge.get("awareness_interval", plugin._awareness_interval)
+                _load_plan_config(plugin, bridge)
                 _load_playmate_config(plugin, bridge)
                 return
         except Exception as e:
@@ -81,9 +84,24 @@ def load_config(plugin):
             plugin._assigned_maid_id = config.get("assigned_maid_id", "")
             plugin._assigned_maid_name = config.get("assigned_maid_name", "")
             plugin._awareness_interval = config.get("awareness_interval", plugin._awareness_interval)
+            _load_plan_config(plugin, config)
             _load_playmate_config(plugin, config)
     except Exception as e:
         plugin.logger.warning(f"Failed to load config: {e}")
+
+
+def _load_plan_config(plugin, config):
+    state = _plan.normalize_plan_state(config.get("structured_plan", {}))
+    text = str(config.get("current_plan", "") or "")
+    if text:
+        plugin._current_plan_text = text
+        plugin._plan_state = state if state.get("title") or state.get("steps") else _plan.plan_from_text(text)
+    elif state.get("title") or state.get("steps"):
+        plugin._plan_state = state
+        plugin._current_plan_text = _plan.plan_to_text(state)
+    else:
+        plugin._current_plan_text = ""
+        plugin._plan_state = _plan.empty_plan()
 
 
 def _load_playmate_config(plugin, config):
@@ -124,6 +142,10 @@ def save_config(plugin):
         existing.setdefault("minecraft_bridge", {})
         existing["minecraft_bridge"]["assigned_maid_id"] = plugin._assigned_maid_id
         existing["minecraft_bridge"]["assigned_maid_name"] = plugin._assigned_maid_name
+        existing["minecraft_bridge"]["current_plan"] = getattr(plugin, "_current_plan_text", "")
+        existing["minecraft_bridge"]["structured_plan"] = _plan.normalize_plan_state(
+            getattr(plugin, "_plan_state", {})
+        )
 
         try:
             import tomlkit
@@ -156,6 +178,8 @@ def save_config(plugin):
                 config = json.load(f)
         config["assigned_maid_id"] = plugin._assigned_maid_id
         config["assigned_maid_name"] = plugin._assigned_maid_name
+        config["current_plan"] = getattr(plugin, "_current_plan_text", "")
+        config["structured_plan"] = _plan.normalize_plan_state(getattr(plugin, "_plan_state", {}))
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
     except Exception as e:

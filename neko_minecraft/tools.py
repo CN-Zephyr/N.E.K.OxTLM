@@ -3,6 +3,7 @@
 from plugin.sdk.plugin import Ok, Err
 
 from . import task_resolver
+from . import plan as _plan
 
 
 async def do_maid_status(plugin):
@@ -273,18 +274,38 @@ async def do_execute_command(plugin, *, command=""):
     })
 
 
-async def do_set_plan(plugin, *, plan=""):
-    plugin.logger.info(f"[Entry] set_plan called with plan='{plan[:80]}'")
+async def do_set_plan(plugin, *, plan=None, title=None, steps=None, completed_steps=None,
+                      uncompleted_steps=None, append_steps=None, clear=False):
+    preview = plan if plan is not None else title if title is not None else ""
+    plugin.logger.info(f"[Entry] set_plan called with preview='{str(preview)[:80]}'")
+    has_update = (
+        clear or plan is not None or title is not None or steps is not None
+        or completed_steps is not None or uncompleted_steps is not None
+        or bool(append_steps)
+    )
+    if not has_update:
+        return Err("请提供 plan 文本，或 title/steps/completed_steps 等结构化计划参数")
     if not plugin.connected:
         return Err("Not connected to Minecraft")
+    plan_state = _plan.update_plan_state(
+        plugin._plan_state,
+        plan=plan,
+        title=title,
+        steps=steps,
+        completed_steps=completed_steps,
+        uncompleted_steps=uncompleted_steps,
+        append_steps=append_steps,
+        clear=clear,
+    )
+    plan_text = _plan.plan_to_text(plan_state)
     result = await plugin._send_request({
         "type": "set_plan",
-        "data": {"plan": plan},
+        "data": {"plan": plan_text},
     })
     if result.get("type") == "error":
         return Err(str(result.get("data", {})))
     result_data = result.get("data", {})
     if result_data.get("success") is False:
         return Err(result_data.get("error", "Set plan failed"))
-    plugin._playmate._current_plan = plan
-    return Ok({"success": True, "plan": plan})
+    plugin._apply_plan_state(plan_state, save=True)
+    return Ok({"success": True, **_plan.plan_summary(plan_state)})

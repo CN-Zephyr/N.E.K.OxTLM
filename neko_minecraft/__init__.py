@@ -14,6 +14,7 @@ from .instructions import _TLM_AI_INSTRUCTIONS
 from .bridge import WSBridge
 from . import config as _config
 from . import events as _events
+from . import plan as _plan
 from .awareness import AwarenessManager
 from . import tools as _tools
 from .playmate import PlaymateContextManager, MinecraftPushRouter
@@ -81,6 +82,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._playmate_suggestion_cooldown = 600
         self._playmate_debug_log_enabled = False
         self._playmate_debug_log_max_bytes = 262144
+        self._current_plan_text = ""
+        self._plan_state = _plan.empty_plan()
         self._playmate_debug = PlaymateDebugLogger(self)
         self._minecraft_push = MinecraftPushRouter(self)
         self._playmate = PlaymateContextManager(self)
@@ -100,6 +103,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             throttle_limit=self._playmate_throttle_limit,
         )
         self._playmate = PlaymateContextManager(self)
+        self._playmate._current_plan = self._current_plan_text
 
     async def _push_minecraft_context(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None, coalesce_key=None):
         await self._minecraft_push.push(
@@ -219,6 +223,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 }, timeout=5)
             except Exception:
                 pass
+        if self._current_plan_text and self._bridge and self._bridge.connected:
+            self._bridge.send({
+                "type": "set_plan",
+                "data": {"plan": self._current_plan_text},
+            })
         instructions = _TLM_AI_INSTRUCTIONS
         if self._assigned_maid_id and self._assigned_maid_name:
             instructions += (
@@ -254,7 +263,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return
         if msg_type == "plan_update":
             plan_text = data.get("data", {}).get("plan", "")
-            self._playmate._current_plan = plan_text
+            self._apply_plan_text(plan_text, save=True)
             return
         if msg_type == "event":
             await self._handle_event(data)
@@ -368,6 +377,24 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return self._assigned_maid_id
         return self._get_cached_maid_id()
 
+    def _apply_plan_state(self, state, save=False):
+        self._plan_state = _plan.normalize_plan_state(state)
+        self._current_plan_text = _plan.plan_to_text(self._plan_state)
+        if self._playmate:
+            self._playmate._current_plan = self._current_plan_text
+        if save:
+            self._save_config()
+        return self._current_plan_text
+
+    def _apply_plan_text(self, plan_text, save=False):
+        self._current_plan_text = str(plan_text or "")
+        self._plan_state = _plan.plan_from_text(self._current_plan_text)
+        if self._playmate:
+            self._playmate._current_plan = self._current_plan_text
+        if save:
+            self._save_config()
+        return self._current_plan_text
+
     def _get_cached_maid_id(self):
         if self._assigned_maid_id:
             return self._assigned_maid_id
@@ -474,5 +501,15 @@ class NekoMinecraftPlugin(NekoPluginBase):
         return await _tools.do_execute_command(self, command=command)
 
     @llm_tool(**MC_SET_PLAN)
-    async def set_plan(self, *, plan="", **_):
-        return await _tools.do_set_plan(self, plan=plan)
+    async def set_plan(self, *, plan=None, title=None, steps=None, completed_steps=None,
+                       uncompleted_steps=None, append_steps=None, clear=False, **_):
+        return await _tools.do_set_plan(
+            self,
+            plan=plan,
+            title=title,
+            steps=steps,
+            completed_steps=completed_steps,
+            uncompleted_steps=uncompleted_steps,
+            append_steps=append_steps,
+            clear=clear,
+        )

@@ -211,20 +211,47 @@ MC_EXECUTE_COMMAND = {
 MC_SET_PLAN = {
     "name": "mc_set_plan",
     "description": (
-        "设置游戏内右上角显示的计划/目标。"
-        "plan参数为计划内容，多行用换行分隔，传空字符串清除计划。"
-        "适用于和玩家商量好目标后，将计划显示在游戏画面上作为提醒。"
-        "计划是动态的：玩家完成某个目标时，应调用此工具更新计划（如加✓标记或移除已完成项）；玩家改变目标时也要同步更新。"
-        "例如：'今天的目标：\n1. 找钻石\n2. 建庇护所'"
+        "设置或更新游戏内右上角显示的当前 Minecraft 目标板。"
+        "这是插件侧的轻量目标板，只负责保存、显示和注入当前游戏目标；不要把它当作 N.E.K.O 宿主的长期任务系统。"
+        "新建目标时优先传 title 和 steps；完成进度变化时传 completed_steps 或 uncompleted_steps（1 基序号）；"
+        "追加步骤时传 append_steps；clear=true 或 plan='' 可清除目标板。"
+        "兼容旧用法：plan 参数仍可传多行文本，系统会解析成结构化目标板并显示。"
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "plan": {
                 "type": "string",
-                "description": "计划内容，多行用换行分隔，空字符串清除计划",
+                "description": "兼容旧用法的计划文本，多行用换行分隔；空字符串清除目标板",
+            },
+            "title": {
+                "type": "string",
+                "description": "当前目标板标题，例如'今天先把据点搭起来'",
+            },
+            "steps": {
+                "type": "array",
+                "description": "替换全部步骤。每项是一条具体 Minecraft 步骤，按显示顺序排列",
+                "items": {"type": "string"},
+            },
+            "completed_steps": {
+                "type": "array",
+                "description": "标记为完成的步骤序号，使用 1 基序号，例如 [1, 3]",
+                "items": {"type": "integer"},
+            },
+            "uncompleted_steps": {
+                "type": "array",
+                "description": "重新标记为未完成的步骤序号，使用 1 基序号",
+                "items": {"type": "integer"},
+            },
+            "append_steps": {
+                "type": "array",
+                "description": "追加到当前目标板末尾的新步骤",
+                "items": {"type": "string"},
+            },
+            "clear": {
+                "type": "boolean",
+                "description": "是否清除当前目标板",
             },
         },
-        "required": ["plan"],
     },
 }

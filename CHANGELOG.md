@@ -1,5 +1,14 @@
 # 更新日志
 
+## 未发布
+
+### 新功能
+
+- **结构化游戏内目标板**：`mc_set_plan` 保持旧版 `plan` 文本兼容，同时新增 `title`、`steps`、`completed_steps`、`uncompleted_steps`、`append_steps`、`clear` 参数。
+  - Python 插件侧保存当前目标板结构化状态，并渲染为纯文本同步到 Minecraft HUD。
+  - 玩家通过 `/neko plan` 设置的文本仍可同步回插件侧，并解析为当前目标板状态。
+  - 目标板仅用于当前 Minecraft 会话目标与 HUD/context 注入，不替代 N.E.K.O 宿主的长期记忆或通用任务系统。
+
 ## v1.0.4 (2026-06-15)（暂未发布Releases）
 
 ### 新功能

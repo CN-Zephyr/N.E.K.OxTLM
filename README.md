@@ -51,7 +51,7 @@ graph LR
 - **女仆聊天** — 让女仆在游戏内发送聊天消息并显示聊天气泡（TTS 由 N.E.K.O 处理，避免重复，LLM 自主判断）
 - **技能系统** — 查询和使用车万女仆的 AI 技能（Skill）
 - **指令执行（需确认）** — N.E.K.O 可请求执行 Minecraft 指令，但需要玩家在游戏内点击确认，防止滥用
-- **游戏内计划显示** — 在 Minecraft 右上角 HUD 显示当前计划，支持 LLM 下发和玩家输入（`/neko plan`）
+- **游戏内目标板** — 在 Minecraft 右上角 HUD 显示当前 Minecraft 目标与步骤，支持 LLM 结构化更新和玩家输入（`/neko plan`）
 
 ## 环境要求
 
@@ -127,7 +127,7 @@ graph LR
 | `execute_command`  | 请求执行 Minecraft 指令 | `command`                                           |
 | `get_config`       | 获取当前配置            | 无                                                   |
 | `set_monitored_maid` | 设置监控的女仆ID（用于背包物品变化检测） | `maid_id`                           |
-| `set_plan`         | 设置游戏内 HUD 计划文本  | `plan`（空字符串清除）                                  |
+| `set_plan`         | 设置游戏内 HUD 计划文本  | `plan`（空字符串清除；插件侧可由结构化目标板生成）          |
 
 #### command\_maid 支持的指令
 
@@ -252,7 +252,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 主动建议触发 | 根据场景（暗处缺火把、挖矿缺光、建造有材料、钓鱼/赶路/整理/刷怪等）生成一句话建议 |
 | 小游戏陪伴 | 棋局事件（五子棋/国际象棋/中国象棋）特殊处理，含冷却和上下文裁剪 |
 | 短期共同目标 | 当前会话内维护"正在一起做什么"，如一起下矿、建家、下棋、赶路，不替代宿主长期记忆 |
-| 游戏内计划显示 | 在 Minecraft 右上角 HUD 显示当前计划，可由 LLM 通过 `mc_set_plan` 工具下发，也可由玩家通过 `/neko plan` 命令设置 |
+| 游戏内目标板 | 在 Minecraft 右上角 HUD 显示当前 Minecraft 目标与步骤。LLM 通过 `mc_set_plan(title, steps, completed_steps, append_steps)` 维护结构化状态，插件发送纯文本给 HUD；玩家仍可通过 `/neko plan` 命令直接设置文本 |
 | 陪玩调试日志 | 可选记录事件路由、活动变化、quiet/suggestion/push 触发原因到插件 `log` 目录，便于实测调参 |
 | 低优先级聚合 | 活动变化、短期记忆等 `read` 上下文会短窗口合并，避免短时间大量 push |
 | 高优先级直通 | 聊天、死亡、低血量、溺水、着火、近处敌怪等仍会立即 `respond` |
@@ -300,8 +300,8 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | --------------------------- | ----------------------------- |
 | `/neko accept <pending_id>` | 确认执行 N.E.K.O 请求的 Minecraft 指令 |
 | `/neko reject <pending_id>` | 拒绝 N.E.K.O 请求的 Minecraft 指令   |
-| `/neko plan <text>`        | 设置游戏内右上角 HUD 显示的计划文本    |
-| `/neko plan clear`         | 清除 HUD 计划显示                    |
+| `/neko plan <text>`        | 设置游戏内右上角 HUD 显示的目标板文本    |
+| `/neko plan clear`         | 清除 HUD 目标板显示                    |
 
 当 N.E.K.O 请求执行指令时，所有在线玩家会收到带有可点击按钮的提示消息。
 
@@ -357,6 +357,7 @@ neko_minecraft/
 ├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
 ├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级 + 棋局局面描述）
 ├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
+├── plan.py              # 当前 Minecraft 目标板结构化状态、文本解析与 HUD 文本渲染
 ├── playmate/            # 陪玩式感知增强
 │   ├── __init__.py      # 子包导出入口
 │   ├── context.py       # 陪玩上下文总协调器

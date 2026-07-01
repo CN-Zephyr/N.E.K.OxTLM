@@ -119,7 +119,7 @@ class PlaymateContextManager:
         if self._current_goal:
             parts.append(f"当前共同目标：{self._current_goal}")
         if self._current_plan:
-            parts.append(f"当前计划：\n{self._current_plan}")
+            parts.append(f"当前目标板：\n{self._current_plan}")
         if summary:
             parts.append(f"最近共同经历：\n{summary}")
         return "\n".join(parts)
