@@ -7,45 +7,25 @@ from . import plan as _plan
 
 COMPANION_MODE_PRESETS = {
     "quiet": {
-        "awareness_interval": 15,
-        "playmate_activity_cooldown": 240,
         "playmate_quiet_stable_seconds": 240,
         "playmate_quiet_cooldown": 900,
-        "playmate_aggregate_window": 12,
-        "playmate_throttle_window": 60,
-        "playmate_throttle_limit": 3,
         "playmate_suggestion_cooldown": 1500,
     },
     "standard": {
-        "awareness_interval": 5,
-        "playmate_activity_cooldown": 120,
         "playmate_quiet_stable_seconds": 90,
         "playmate_quiet_cooldown": 300,
-        "playmate_aggregate_window": 8,
-        "playmate_throttle_window": 30,
-        "playmate_throttle_limit": 6,
         "playmate_suggestion_cooldown": 600,
     },
     "active": {
-        "awareness_interval": 3,
-        "playmate_activity_cooldown": 60,
         "playmate_quiet_stable_seconds": 45,
         "playmate_quiet_cooldown": 150,
-        "playmate_aggregate_window": 4,
-        "playmate_throttle_window": 30,
-        "playmate_throttle_limit": 10,
         "playmate_suggestion_cooldown": 240,
     },
 }
 
 COMPANION_CUSTOM_FIELDS = [
-    "awareness_interval",
-    "playmate_activity_cooldown",
     "playmate_quiet_stable_seconds",
     "playmate_quiet_cooldown",
-    "playmate_aggregate_window",
-    "playmate_throttle_window",
-    "playmate_throttle_limit",
     "playmate_suggestion_cooldown",
 ]
 

@@ -13,8 +13,8 @@
   - 玩家先提出具体工作后再说“切换模式/换模式”时，LLM 应承接上一轮工作意图。
   - 不确定具体任务 ID/名称时，先调用 `mc_maid_status` 查看 `available_tasks`，再用精确任务调用 `mc_switch_task`，避免依赖插件静态同义词表。
 - **陪玩活跃度预设**：新增 `companion_mode` 配置，支持 `quiet`、`standard`、`active`、`custom`。
-  - 三种预设只调整本插件的 Minecraft 感知、quiet/suggestion 冷却和 push 节流，不控制 N.E.K.O 宿主模型、TTS 或全局工具策略。
-  - `custom` 保留原有手动调参行为。
+  - 三种预设只调整女仆主动搭话相关参数：`playmate_quiet_stable_seconds`、`playmate_quiet_cooldown`、`playmate_suggestion_cooldown`。
+  - `custom` 只开放这 3 个发言频率参数，不控制 Minecraft 感知频率、活动防抖、消息聚合、防刷屏限流、N.E.K.O 宿主模型、TTS 或全局工具策略。
 - **桥接诊断**：新增 `diagnose_bridge` action/entry 和面板按钮。
   - 检查 Java/Minecraft 进程、WebSocket、mod 配置、聊天显示、女仆状态和已指定女仆。
   - 明确诊断范围只覆盖本插件与 Minecraft mod 的桥接边界。

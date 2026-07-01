@@ -68,34 +68,19 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const [selectedMaidId, setSelectedMaidId] = useLocalState<string>("selectedMaidId", "")
   const settingText = (key: string) => String(companionSettings[key] ?? "")
   const [selectedCompanionMode, setSelectedCompanionMode] = useState<string>(companionMode)
-  const [customAwarenessInterval, setCustomAwarenessInterval] = useState<string>(settingText("awareness_interval"))
-  const [customActivityCooldown, setCustomActivityCooldown] = useState<string>(settingText("playmate_activity_cooldown"))
   const [customQuietStableSeconds, setCustomQuietStableSeconds] = useState<string>(settingText("playmate_quiet_stable_seconds"))
   const [customQuietCooldown, setCustomQuietCooldown] = useState<string>(settingText("playmate_quiet_cooldown"))
-  const [customAggregateWindow, setCustomAggregateWindow] = useState<string>(settingText("playmate_aggregate_window"))
-  const [customThrottleWindow, setCustomThrottleWindow] = useState<string>(settingText("playmate_throttle_window"))
-  const [customThrottleLimit, setCustomThrottleLimit] = useState<string>(settingText("playmate_throttle_limit"))
   const [customSuggestionCooldown, setCustomSuggestionCooldown] = useState<string>(settingText("playmate_suggestion_cooldown"))
 
   useEffect(() => {
     setSelectedCompanionMode(companionMode)
-    setCustomAwarenessInterval(settingText("awareness_interval"))
-    setCustomActivityCooldown(settingText("playmate_activity_cooldown"))
     setCustomQuietStableSeconds(settingText("playmate_quiet_stable_seconds"))
     setCustomQuietCooldown(settingText("playmate_quiet_cooldown"))
-    setCustomAggregateWindow(settingText("playmate_aggregate_window"))
-    setCustomThrottleWindow(settingText("playmate_throttle_window"))
-    setCustomThrottleLimit(settingText("playmate_throttle_limit"))
     setCustomSuggestionCooldown(settingText("playmate_suggestion_cooldown"))
   }, [
     companionMode,
-    companionSettings.awareness_interval,
-    companionSettings.playmate_activity_cooldown,
     companionSettings.playmate_quiet_stable_seconds,
     companionSettings.playmate_quiet_cooldown,
-    companionSettings.playmate_aggregate_window,
-    companionSettings.playmate_throttle_window,
-    companionSettings.playmate_throttle_limit,
     companionSettings.playmate_suggestion_cooldown,
   ])
 
@@ -112,13 +97,8 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const effectiveCompanionMode = selectedCompanionMode || companionMode
   const customValue = (key: string, draft: string) => draft || String(companionSettings[key] ?? "")
   const customCompanionValues = {
-    awareness_interval: customValue("awareness_interval", customAwarenessInterval),
-    playmate_activity_cooldown: customValue("playmate_activity_cooldown", customActivityCooldown),
     playmate_quiet_stable_seconds: customValue("playmate_quiet_stable_seconds", customQuietStableSeconds),
     playmate_quiet_cooldown: customValue("playmate_quiet_cooldown", customQuietCooldown),
-    playmate_aggregate_window: customValue("playmate_aggregate_window", customAggregateWindow),
-    playmate_throttle_window: customValue("playmate_throttle_window", customThrottleWindow),
-    playmate_throttle_limit: customValue("playmate_throttle_limit", customThrottleLimit),
     playmate_suggestion_cooldown: customValue("playmate_suggestion_cooldown", customSuggestionCooldown),
   }
 
@@ -184,26 +164,11 @@ export default function Panel(props: PluginSurfaceProps<State>) {
           {effectiveCompanionMode === "custom" && (
             <Stack>
               <Alert tone="info">{t("companion.customHint")}</Alert>
-              <Field label={t("companion.fields.awarenessInterval")} help={t("companion.fields.awarenessIntervalHelp")}>
-                <Input value={customCompanionValues.awareness_interval} onChange={setCustomAwarenessInterval} />
-              </Field>
-              <Field label={t("companion.fields.activityCooldown")} help={t("companion.fields.activityCooldownHelp")}>
-                <Input value={customCompanionValues.playmate_activity_cooldown} onChange={setCustomActivityCooldown} />
-              </Field>
               <Field label={t("companion.fields.quietStableSeconds")} help={t("companion.fields.quietStableSecondsHelp")}>
                 <Input value={customCompanionValues.playmate_quiet_stable_seconds} onChange={setCustomQuietStableSeconds} />
               </Field>
               <Field label={t("companion.fields.quietCooldown")} help={t("companion.fields.quietCooldownHelp")}>
                 <Input value={customCompanionValues.playmate_quiet_cooldown} onChange={setCustomQuietCooldown} />
-              </Field>
-              <Field label={t("companion.fields.aggregateWindow")} help={t("companion.fields.aggregateWindowHelp")}>
-                <Input value={customCompanionValues.playmate_aggregate_window} onChange={setCustomAggregateWindow} />
-              </Field>
-              <Field label={t("companion.fields.throttleWindow")} help={t("companion.fields.throttleWindowHelp")}>
-                <Input value={customCompanionValues.playmate_throttle_window} onChange={setCustomThrottleWindow} />
-              </Field>
-              <Field label={t("companion.fields.throttleLimit")} help={t("companion.fields.throttleLimitHelp")}>
-                <Input value={customCompanionValues.playmate_throttle_limit} onChange={setCustomThrottleLimit} />
               </Field>
               <Field label={t("companion.fields.suggestionCooldown")} help={t("companion.fields.suggestionCooldownHelp")}>
                 <Input value={customCompanionValues.playmate_suggestion_cooldown} onChange={setCustomSuggestionCooldown} />

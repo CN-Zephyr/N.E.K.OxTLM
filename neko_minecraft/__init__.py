@@ -475,19 +475,14 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @plugin_entry(
         id="set_companion_mode",
         name=tr("entries.setCompanionMode.name", default="Set Companion Mode"),
-        description="Set plugin-side Minecraft companion activity preset. Custom fields only affect this plugin's Minecraft awareness/push/cooldown behavior, not N.E.K.O host model or TTS behavior.",
+        description="Set plugin-side Minecraft companion activity preset. Custom fields only affect proactive companion speech frequency, not Minecraft awareness polling, push aggregation, anti-spam throttling, N.E.K.O host model, or TTS behavior.",
         input_schema={
             "type": "object",
             "properties": {
                 "mode": {"type": "string", "enum": ["quiet", "standard", "active", "custom"], "description": "Companion activity preset"},
-                "awareness_interval": {"type": "string", "description": "Seconds between active Minecraft awareness checks"},
-                "playmate_activity_cooldown": {"type": "string", "description": "Seconds before activity inference can push again"},
-                "playmate_quiet_stable_seconds": {"type": "string", "description": "Seconds of stable quiet state before quiet handling"},
-                "playmate_quiet_cooldown": {"type": "string", "description": "Seconds between quiet-state proactive pushes"},
-                "playmate_aggregate_window": {"type": "string", "description": "Seconds to aggregate low priority Minecraft events"},
-                "playmate_throttle_window": {"type": "string", "description": "Seconds for proactive push throttle window"},
-                "playmate_throttle_limit": {"type": "string", "description": "Maximum proactive pushes in the throttle window"},
-                "playmate_suggestion_cooldown": {"type": "string", "description": "Seconds between suggestion pushes"},
+                "playmate_quiet_stable_seconds": {"type": "string", "description": "Seconds of no relevant activity before companion speech can trigger"},
+                "playmate_quiet_cooldown": {"type": "string", "description": "Seconds between quiet companion speech attempts"},
+                "playmate_suggestion_cooldown": {"type": "string", "description": "Seconds between proactive suggestion speech attempts"},
             },
             "required": ["mode"],
         },

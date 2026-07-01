@@ -276,7 +276,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 
 #### 陪玩系统配置
 
-当 `companion_mode` 为 `quiet`、`standard` 或 `active` 时，插件会覆盖下方部分频率/冷却参数；当 `companion_mode = "custom"` 时，完全使用手动配置。该模式只影响本插件的 Minecraft 感知、陪玩 push、quiet/suggestion 触发频率，不控制 N.E.K.O 宿主的模型、TTS 或全局工具调用策略。
+当 `companion_mode` 为 `quiet`、`standard` 或 `active` 时，插件只覆盖主动搭话频率相关的 3 个参数：`playmate_quiet_stable_seconds`、`playmate_quiet_cooldown`、`playmate_suggestion_cooldown`；当 `companion_mode = "custom"` 时，使用这 3 个参数的手动配置。该模式不控制 Minecraft 感知频率、活动防抖、消息聚合、防刷屏限流、N.E.K.O 宿主模型、TTS 或全局工具调用策略。
 
 | 配置项 | 默认值 | 说明 |
 | ------ | ------ | ---- |
@@ -286,14 +286,14 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | `playmate_memory_inject_chars` | `700` | 注入共同经历文本最大长度 |
 | `playmate_activity_debounce_checks` | `2` | 活动状态需要连续命中几次才确认 |
 | `playmate_activity_cooldown` | `120` | 活动状态变化冷却时间，单位秒 |
-| `playmate_quiet_stable_seconds` | `90` | 同一活动稳定多久后允许安静陪伴触发 |
-| `playmate_quiet_cooldown` | `300` | 安静陪伴冷却时间，单位秒 |
+| `playmate_quiet_stable_seconds` | `90` | 多久没动静后允许触发陪伴发言 |
+| `playmate_quiet_cooldown` | `300` | 陪伴发言冷却时间，单位秒 |
 | `playmate_aggregate_window` | `8` | 低优先级上下文聚合窗口，单位秒 |
 | `playmate_throttle_window` | `30` | push 节流统计窗口，单位秒 |
 | `playmate_throttle_limit` | `6` | 节流窗口内允许的 push 次数 |
 | `playmate_minigame_feedback_cooldown` | `90` | 小游戏（棋局）中盘反馈冷却时间，单位秒 |
 | `playmate_minigame_context_chars` | `90` | 小游戏陪伴上下文最大字符数 |
-| `playmate_suggestion_cooldown` | `600` | 轻量主动建议冷却时间，单位秒 |
+| `playmate_suggestion_cooldown` | `600` | 主动建议发言冷却时间，单位秒 |
 | `playmate_debug_log_enabled` | `false` | 是否启用陪玩调试日志 |
 | `playmate_debug_log_max_bytes` | `262144` | `log/playmate_debug.log` 最大大小，超出后保留尾部内容 |
 
