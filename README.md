@@ -128,6 +128,7 @@ graph LR
 | `get_config`       | 获取当前配置            | 无                                                   |
 | `set_monitored_maid` | 设置监控的女仆ID（用于背包物品变化检测） | `maid_id`                           |
 | `set_plan`         | 设置游戏内 HUD 计划文本  | `plan`（空字符串清除；插件侧可由结构化目标板生成）          |
+| `get_plan`         | 获取当前游戏内 HUD 计划文本 | 无（返回 `plan_result`）                              |
 
 #### command\_maid 支持的指令
 
@@ -152,7 +153,7 @@ Python 插件侧的 `mc_switch_task` 会在命令返回成功后再次查询 `ge
 | `effects`         | 女仆当前药水效果         |
 | `position`        | 女仆与主人的位置（含亮度/地下） |
 | `nearby_entities` | 女仆附近实体           |
-| `awareness`       | 感知系统综合数据（一次返回所有 awareness 需要的信息） |
+| `awareness`       | 感知系统综合数据（一次返回所有 awareness 需要的信息，含玩家经验等级、装备耐久度等） |
 
 ### 响应消息
 
@@ -241,6 +242,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 | 女仆背包变化  | 背包物品列表变化时      | "女仆背包状态已更新，共N件物品" |
 | 容器交互    | 女仆主人打开/关闭容器    | 用于判断玩家可能正在整理物品，不直接打扰 |
 | 钓鱼开始    | 女仆主人使用鱼竿       | 用于判断玩家进入钓鱼/等待节奏 |
+| 玩家进度上下文 | awareness 数据携带 | 玩家经验等级 `player_experience_level`、当前等级进度 `player_experience_progress`（0-1）、装备耐久度 `player_equipment_durability`（主手/副手/头/胸/腿/脚 6 槽，仅记录有耐久度的物品，含 `durability_ratio`）；LLM 通过 `mc_game_context(awareness)` 主动查询，不主动推送 |
 
 ### 陪玩式感知
 
@@ -261,6 +263,22 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 
 当前陪玩触发偏保守：不明确的 `unknown`、泛化的 `exploring`、危险探索 `danger_exploring`、战斗中 `combat`、采集整理 `gathering`、整理物品 `organizing`、村民交易 `trading`、玩家远离 `away` 时不会触发安静陪伴，避免乱报和打扰。
 
+### Push 聚合与 coalesce_key 节流
+
+主动回复推送（`ai_behavior="respond"`）使用分组覆盖机制：相同 `coalesce_key` 的新推送自动覆盖旧的未消费推送，避免 LLM 忙时堆积过时回复。
+
+| coalesce_key | 覆盖范围 | 示例事件 |
+| ------------ | -------- | -------- |
+| `mc_alert` | 紧急警报 | 受伤、低血量、着火、溺水 |
+| `mc_awareness` | 非紧急感知 | 敌怪出现、饥饿提醒 |
+| `mc_event` | 环境变化 | 群系/天气/昼夜/背包/钓鱼 |
+| `mc_activity` | 活动状态变化 | 挖矿→钓鱼等 |
+| `mc_companion` | 安静陪伴 | 陪伴搭话 |
+| `mc_suggestion` | 主动建议 | 场景化建议 |
+| `mc_chess` | 棋局事件 | 中盘反馈 |
+
+聊天消息、死亡事件、成就解锁、维度切换不设 key（每条独立保留，不覆盖）。
+
 ### N.E.K.O 插件侧配置
 
 以下配置位于 `neko_minecraft/plugin.toml` 的 `[minecraft_bridge]` 段：
@@ -269,7 +287,7 @@ Python 侧插件按配置的 `awareness_interval` 轮询游戏状态（通过 `a
 
 | 配置项 | 默认值 | 说明 |
 | ------ | ------ | ---- |
-| `ws_url` | `ws://127.0.0.1:48920` | WebSocket 连接地址 |
+| `ws_url` | `ws://127.0.0.1:48920` | WebSocket 连接地址（端口也可通过插件面板"保存端口"按钮动态修改，自动重启桥接） |
 | `heartbeat_interval` | `30` | 心跳间隔，单位秒 |
 | `reconnect_interval` | `5` | 断线重连间隔，单位秒 |
 | `max_reconnect_interval` | `60` | 最大重连间隔，单位秒 |
@@ -352,6 +370,7 @@ minecraft-mod/src/main/java/com/neko_tlm_bridge/
         ├── SkillHandler.java            # 技能查询与使用
         ├── ConfigHandler.java           # 配置查询与监控女仆设置
         ├── SetPlanHandler.java          # 计划设置处理
+        ├── GetPlanHandler.java          # 计划查询处理
         └── MaidHelper.java              # 女仆查找共享工具方法
 ```
 
@@ -363,7 +382,7 @@ neko_minecraft/
 ├── instructions.py      # AI 指令模板（注入到 LLM 上下文的系统提示词）
 ├── task_resolver.py     # 任务名解析与模糊匹配（中文同义词 → TLM 任务 ID）
 ├── bridge.py            # WebSocket 桥接层（连接、重连、心跳、收发队列、MC进程检测）
-├── config.py            # 配置加载/保存/同步（TOML + JSON 双格式支持）
+├── config.py            # 配置加载/保存/同步（TOML 格式）
 ├── events.py            # 游戏事件格式化（事件数据 → 角色化文本 + 优先级 + 棋局局面描述）
 ├── awareness.py         # 感知系统（定时轮询、状态检测、cooldown 管理）
 ├── diagnostics.py       # 桥接诊断（连接、mod 配置、女仆状态、宿主边界提示）
@@ -380,7 +399,6 @@ neko_minecraft/
 │   └── debug_log.py     # 陪玩调试日志
 ├── tools.py             # LLM 工具业务逻辑（11个 do_* 函数）
 ├── tool_defs.py         # LLM 工具元数据常量（name/description/parameters）
-├── config.json          # 默认配置
 ├── plugin.toml          # 插件描述与运行时配置
 ├── ui/
 │   └── panel.tsx        # 仪表盘 UI 面板
@@ -404,4 +422,4 @@ MIT License
 ## 致谢
 
 - [车万女仆 (Touhou Little Maid)](https://github.com/TartaricAcid/TouhouLittleMaid) — 提供了优秀的女仆系统与 AI 扩展 API
-- [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) — 自然语言 AI 控制框架，很好用的猫娘
+- [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) — 自然语言 AI 控制框架（猫娘）
