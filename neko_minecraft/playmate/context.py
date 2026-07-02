@@ -60,8 +60,12 @@ class PlaymateContextManager:
             ai_behavior = "read"
             priority = 1
             aggregate = True
-            if update.state in ("mining", "underground_exploring"):
-                activity_text = f"{update.text}\n玩家像是进入了下矿/探洞节奏。请主动短短陪一句，重点是一起下去、注意照明或会陪着，不要像系统提醒。"
+            respond_states = ("mining", "underground_exploring", "fishing", "base_building",
+                             "traveling", "idle", "nether_exploring", "end_exploring",
+                             "redstone_engineering", "exploring")
+            if update.state in respond_states:
+                if update.state in ("mining", "underground_exploring"):
+                    activity_text = f"{update.text}\n玩家像是进入了下矿/探洞节奏。请主动短短陪一句，重点是一起下去、注意照明或会陪着，不要像系统提醒。"
                 ai_behavior = "respond"
                 priority = 3
                 aggregate = False

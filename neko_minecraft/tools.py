@@ -6,13 +6,81 @@ from . import task_resolver
 from . import plan as _plan
 
 
+_ITEM_ALIASES = {
+    "火把": "minecraft:torch",
+    "普通火把": "minecraft:torch",
+    "torch": "minecraft:torch",
+    "灵魂火把": "minecraft:soul_torch",
+    "soul_torch": "minecraft:soul_torch",
+}
+
+
+def _normalize_item_id(item):
+    text = str(item or "").strip()
+    if not text:
+        return ""
+    return _ITEM_ALIASES.get(text.lower(), _ITEM_ALIASES.get(text, text))
+
+
 async def do_maid_status(plugin):
     if not plugin.connected:
         return {"output": {"error": "Not connected to Minecraft"}, "is_error": True, "error": "NOT_CONNECTED"}
     result = await plugin._send_request({"type": "get_maid_status"})
     if result.get("type") == "error":
         return {"output": result.get("data", {}), "is_error": True, "error": "REQUEST_FAILED"}
-    return {"maids": result.get("data", {}).get("maids", [])}
+    maids = result.get("data", {}).get("maids", [])
+    for maid in maids:
+        plugin._maid_status_cache[maid.get("id", "")] = maid
+    return maid_status_payload(plugin, maids)
+
+
+def maid_status_payload(plugin, maids, *, compact=False):
+    payload = {
+        "maids": [_compact_maid_status(m) for m in maids] if compact else maids,
+    }
+    selected = _select_status_maid(plugin, maids)
+    if not selected:
+        return payload
+    current_task = selected.get("task", "")
+    current_task_name = _task_name_for_id(current_task, selected.get("available_tasks", []))
+    payload["selected_maid"] = _compact_maid_status(selected)
+    payload["current_mode"] = {
+        "id": current_task,
+        "name": current_task_name,
+    }
+    payload["current_mode_answer"] = f"当前真实模式是：{current_task_name or current_task or '未知'}"
+    payload["available_modes"] = _normalize_available_tasks(selected.get("available_tasks", []))
+    return payload
+
+
+def _compact_maid_status(maid):
+    available = maid.get("available_tasks", [])
+    current_task = maid.get("task", "")
+    return {
+        "id": maid.get("id", ""),
+        "name": maid.get("name", ""),
+        "health": maid.get("health", 0),
+        "max_health": maid.get("max_health", 0),
+        "is_sitting": maid.get("is_sitting", False),
+        "is_following": maid.get("is_following", False),
+        "current_mode": {
+            "id": current_task,
+            "name": _task_name_for_id(current_task, available),
+        },
+        "main_hand_item": maid.get("main_hand_item", ""),
+        "off_hand_item": maid.get("off_hand_item", ""),
+    }
+
+
+def _select_status_maid(plugin, maids):
+    if not maids:
+        return None
+    assigned = getattr(plugin, "_assigned_maid_id", "")
+    if assigned:
+        for maid in maids:
+            if maid.get("id") == assigned:
+                return maid
+    return maids[0]
 
 
 async def do_switch_follow(plugin, *, action="follow"):
@@ -146,6 +214,8 @@ async def do_switch_task(plugin, *, task=""):
         )
     plugin.logger.info(f"[Entry] switch_task success: task='{task}' -> '{resolved_task}'")
     verification = await _verify_switched_task(plugin, maid_id, resolved_task)
+    if not verification.get("verified"):
+        return _switch_task_verification_error(task, resolved_task, verification, result_data)
     return Ok({
         "success": True,
         "requested_task": task,
@@ -171,6 +241,26 @@ def _switch_task_recoverable_error(task, available, message, raw_error=None, res
         },
         "is_error": True,
         "error": "TASK_SWITCH_RECOVERABLE",
+    }
+
+
+def _switch_task_verification_error(task, resolved_task, verification, raw_result=None):
+    return {
+        "output": {
+            "success": False,
+            "recoverable": True,
+            "error": "Minecraft reported task switch success, but status verification shows a different current task",
+            "requested_task": task,
+            "matched_task_id": resolved_task,
+            "raw_result": raw_result or {},
+            **verification,
+            "retry_hint": (
+                "不要告诉玩家已经切换成功。请说明 current_task/current_task_name 才是真实模式，"
+                "并从 available_tasks 中选择攻击/战斗对应的精确 id/name 后再次调用 mc_switch_task。"
+            ),
+        },
+        "is_error": True,
+        "error": "TASK_SWITCH_VERIFY_FAILED",
     }
 
 
@@ -238,6 +328,50 @@ def _task_name_for_id(task_id, available):
     return ""
 
 
+async def _verify_equipped_item(plugin, maid_id, expected_item):
+    expected_item = str(expected_item or "").strip()
+    if not expected_item:
+        return {
+            "verified": False,
+            "verification_error": "Command did not report which item should be in main hand",
+        }
+
+    status_result = await plugin._send_request({"type": "get_maid_status"}, timeout=5)
+    if status_result.get("type") == "error":
+        return {
+            "verified": False,
+            "verification_error": status_result.get("data", {}),
+            "expected_item": expected_item,
+        }
+
+    maids = status_result.get("data", {}).get("maids", [])
+    for maid in maids:
+        if maid.get("id") == maid_id:
+            plugin._maid_status_cache[maid_id] = maid
+            current_main = maid.get("main_hand_item", "")
+            current_off = maid.get("off_hand_item", "")
+            return {
+                "verified": _item_matches(current_main, expected_item),
+                "expected_item": expected_item,
+                "current_main_hand_item": current_main,
+                "current_off_hand_item": current_off,
+            }
+
+    return {
+        "verified": False,
+        "verification_error": "Assigned maid was not present in status response",
+        "expected_item": expected_item,
+    }
+
+
+def _item_matches(current_item, expected_item):
+    current = str(current_item or "").strip().lower()
+    expected = str(expected_item or "").strip().lower()
+    if not current or not expected:
+        return False
+    return current == expected or current.split(":")[-1] == expected.split(":")[-1]
+
+
 async def do_switch_schedule(plugin, *, schedule="all"):
     plugin.logger.info(f"[Entry] switch_schedule called with schedule='{schedule}'")
     if not plugin.connected:
@@ -265,8 +399,9 @@ async def do_equip_item(plugin, *, item="", slot=None):
     if not maid_id:
         return Err("No maid assigned")
     args = {}
+    requested_item = _normalize_item_id(item)
     if item:
-        args["item"] = item
+        args["item"] = requested_item
     elif slot is not None:
         args["slot"] = slot
     else:
@@ -275,12 +410,45 @@ async def do_equip_item(plugin, *, item="", slot=None):
         "type": "command_maid",
         "data": {"maid_id": maid_id, "command": "equip_item", "args": args},
     })
+    result_data = result.get("data", {})
     if result.get("type") == "error":
         return Err(str(result.get("data", {})))
-    result_data = result.get("data", {})
     if result_data.get("success") is False:
+        if requested_item:
+            verification = await _verify_equipped_item(plugin, maid_id, requested_item)
+            if verification.get("verified"):
+                return Ok({
+                    "success": True,
+                    "already_equipped": True,
+                    "requested_item": requested_item,
+                    **verification,
+                })
         return Err(result_data.get("error", "Command failed"))
-    return Ok({"success": True, "equipped_item": item or f"slot:{slot}"})
+    equipped_item = str(result_data.get("equipped_item") or requested_item or "").strip()
+    verification = await _verify_equipped_item(plugin, maid_id, equipped_item)
+    if not verification.get("verified"):
+        return {
+            "output": {
+                "success": False,
+                "recoverable": True,
+                "error": "Equip command returned success, but main-hand verification failed",
+                "requested_item": requested_item or f"slot:{slot}",
+                "raw_result": result_data,
+                **verification,
+                "retry_hint": (
+                    "Do not tell the player the item is equipped. "
+                    "If the player asked to hold a torch, explain the actual main-hand item and retry with item='minecraft:torch' or a precise inventory slot."
+                ),
+            },
+            "is_error": True,
+            "error": "EQUIP_VERIFY_FAILED",
+        }
+    return Ok({
+        "success": True,
+        "requested_item": requested_item or f"slot:{slot}",
+        "equipped_item": equipped_item,
+        **verification,
+    })
 
 
 async def do_send_chat(plugin, *, message, maid_id=None):
@@ -385,7 +553,12 @@ async def do_set_plan(plugin, *, plan=None, title=None, steps=None, completed_st
         or bool(append_steps)
     )
     if not has_update:
-        return Err("请提供 plan 文本，或 title/steps/completed_steps 等结构化计划参数")
+        return Ok({
+            "success": False,
+            "noop": True,
+            "message": "No goal board update was requested. Ignore this result and do not mention it to the player.",
+            **_plan.plan_summary(plugin._plan_state),
+        })
     if not plugin.connected:
         return Err("Not connected to Minecraft")
     plan_state = _plan.update_plan_state(

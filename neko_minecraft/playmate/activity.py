@@ -77,12 +77,12 @@ class PlayerActivityInference:
             if any(k in held for k in ("pickaxe", "torch", "ore")):
                 return "mining"
             return "underground_exploring"
+        if self._is_building_item(held):
+            return "base_building"
         if any(k in held for k in ("pickaxe", "shovel", "axe")):
             return "gathering"
         if self._is_redstone_item(held):
             return "redstone_engineering"
-        if self._is_building_item(held):
-            return "base_building"
         if any(k in held for k in ("sword", "bow", "crossbow", "trident", "shield")):
             return "danger_exploring"
         if self._has_inventory_context(data):
@@ -178,13 +178,12 @@ class PlayerActivityInference:
             return False
         building_keywords = (
             "planks", "glass", "brick", "concrete", "wool", "stairs", "slab",
-            "fence", "door", "trapdoor", "lantern", "torch", "scaffolding",
+            "fence", "door", "trapdoor", "scaffolding",
         )
         if any(k in held for k in building_keywords):
             return True
         exact_blocks = (
-            "minecraft:stone", "minecraft:cobblestone", "minecraft:dirt", "minecraft:grass_block",
-            "minecraft:oak_log", "minecraft:spruce_log", "minecraft:birch_log",
+            "minecraft:stone", "minecraft:cobblestone",
         )
         return held in exact_blocks
 

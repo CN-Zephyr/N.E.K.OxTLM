@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 from .instructions import _TLM_AI_INSTRUCTIONS
 from .bridge import WSBridge
@@ -54,6 +55,29 @@ def _parse_step_index(value):
         return [int(value)]
     except Exception:
         return None
+
+
+def _ws_port_from_url(ws_url):
+    try:
+        port = urlsplit(str(ws_url or "")).port
+    except Exception:
+        return ""
+    return str(port or "")
+
+
+def _ws_url_with_port(ws_url, port):
+    try:
+        parsed = urlsplit(str(ws_url or ""))
+    except Exception:
+        parsed = None
+    scheme = parsed.scheme if parsed and parsed.scheme in ("ws", "wss") else "ws"
+    host = parsed.hostname if parsed and parsed.hostname else "127.0.0.1"
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    path = parsed.path if parsed else ""
+    query = parsed.query if parsed else ""
+    fragment = parsed.fragment if parsed else ""
+    return urlunsplit((scheme, f"{host}:{port}", path, query, fragment))
 
 
 @neko_plugin
@@ -106,7 +130,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         _config.load_config(self)
 
     def _save_config(self):
-        _config.save_config(self)
+        return _config.save_config(self)
 
     def _refresh_playmate_modules(self):
         self._minecraft_push = MinecraftPushRouter(
@@ -117,6 +141,26 @@ class NekoMinecraftPlugin(NekoPluginBase):
         )
         self._playmate = PlaymateContextManager(self)
         self._playmate._current_plan = self._current_plan_text
+
+    async def _restart_bridge(self):
+        for request_id, future in list(self._request_futures.items()):
+            if not future.done():
+                future.set_result({"type": "error", "data": {"message": "Bridge restarted, please retry"}})
+        self._request_futures.clear()
+        self._maid_status_cache = {}
+        self._last_diagnostic = None
+        self._instructions_injected = False
+        old_bridge = self._bridge
+        self._bridge = None
+        if old_bridge:
+            await asyncio.to_thread(old_bridge.stop)
+        self._bridge = WSBridge(
+            ws_url=self._ws_url, logger=self.logger,
+            heartbeat_interval=self._heartbeat_interval,
+            reconnect_interval=self._reconnect_interval,
+            max_reconnect_interval=self._max_reconnect_interval,
+        )
+        self._bridge.start()
 
     async def _push_minecraft_context(self, text, ai_behavior="read", priority=1, metadata=None, aggregate=None, coalesce_key=None):
         await self._minecraft_push.push(
@@ -143,6 +187,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._bridge = WSBridge(
             ws_url=self._ws_url, logger=self.logger,
             heartbeat_interval=self._heartbeat_interval,
+            reconnect_interval=self._reconnect_interval,
+            max_reconnect_interval=self._max_reconnect_interval,
         )
         self._bridge.start()
         self._poll_task = asyncio.create_task(self._poll_messages())
@@ -381,7 +427,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
 
     @property
     def connected(self):
-        return self._bridge and self._bridge.connected
+        return bool(self._bridge and self._bridge.connected)
 
     def _resolve_maid_id(self, maid_id=None):
         if maid_id:
@@ -439,7 +485,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 "owner": maid.get("owner", ""),
             })
         return {
-            "connected": self.connected, "ws_url": self._ws_url, "maids": maids,
+            "connected": self.connected,
+            "ws_url": self._ws_url,
+            "ws_port": _ws_port_from_url(self._ws_url),
+            "maids": maids,
             "assigned_maid_id": self._assigned_maid_id,
             "assigned_maid_name": self._assigned_maid_name,
             "command_execution_enabled": self._command_execution_enabled,
@@ -451,14 +500,17 @@ class NekoMinecraftPlugin(NekoPluginBase):
         }
 
     @ui.action(id="refresh_maid_status", label=tr("actions.refresh", default="Refresh Status"), tone="primary", refresh_context=True)
-    @plugin_entry(id="refresh_maid_status", name=tr("entries.refresh.name", default="Refresh Maid Status"), description="Fetch current maid status from Minecraft", input_schema={"type": "object", "properties": {}}, llm_result_fields=["maids"])
+    @plugin_entry(id="refresh_maid_status", name=tr("entries.refresh.name", default="Refresh Maid Status"), description="Fetch current maid status and true current work mode from Minecraft. When the user asks what mode the maid is in, answer from current_mode/current_mode_answer, not from previous intent.", input_schema={"type": "object", "properties": {}}, llm_result_fields=["current_mode", "current_mode_answer", "selected_maid", "available_modes", "maids"])
     async def refresh_maid_status(self, **_):
         if not self.connected:
             return Err("Not connected to Minecraft")
         result = await self._send_request({"type": "get_maid_status"})
         if result.get("type") == "error":
             return Err(str(result.get("data", {})))
-        return Ok({"maids": result.get("data", {}).get("maids", [])})
+        maids = result.get("data", {}).get("maids", [])
+        for maid in maids:
+            self._maid_status_cache[maid.get("id", "")] = maid
+        return Ok(_tools.maid_status_payload(self, maids, compact=True))
 
     @ui.action(id="assign_maid", label=tr("actions.assignMaid", default="Assign Maid"), tone="primary", refresh_context=True)
     @plugin_entry(id="assign_maid", name=tr("entries.assign.name", default="Assign Maid"), description="Assign a specific maid by ID for the AI to control. ONLY use this tool when you need to CHANGE the current maid or no maid is assigned. If a maid is already assigned in the config, you do NOT need to call this tool; just proceed with the task directly.", input_schema={"type": "object", "properties": {"maid_id": {"type": "string", "description": "The maid entity ID (UUID) to assign"}, "maid_name": {"type": "string", "description": "The maid name for display"}}, "required": []}, llm_result_fields=["assigned_maid_id", "assigned_maid_name"])
@@ -476,6 +528,52 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self._bridge.send({"type": "set_monitored_maid", "data": {"maid_id": maid_id}})
         return Ok({"assigned_maid_id": maid_id, "assigned_maid_name": maid_name})
 
+    @ui.action(id="set_connection_port", label=tr("actions.setConnectionPort", default="Save Port"), tone="primary", refresh_context=True)
+    @plugin_entry(
+        id="set_connection_port",
+        name=tr("entries.setConnectionPort.name", default="Save Bridge Port"),
+        description="Save the plugin UI connection port for the Minecraft WebSocket bridge. Only use when the user explicitly asks to change the bridge port; this is not a gameplay or maid-control action.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "port": {
+                    "type": "string",
+                    "description": "WebSocket port number, 1-65535.",
+                },
+            },
+            "required": ["port"],
+        },
+        llm_result_fields=["ws_url", "ws_port", "restarted", "saved"],
+    )
+    async def set_connection_port(self, *, port="", **_):
+        raw_port = str(port or "").strip()
+        try:
+            port_number = int(raw_port)
+        except Exception:
+            return Err("Port must be a number")
+        if port_number < 1 or port_number > 65535:
+            return Err("Port must be between 1 and 65535")
+
+        old_url = self._ws_url
+        new_url = _ws_url_with_port(old_url, port_number)
+        self._ws_url = new_url
+        saved = self._save_config()
+        if not saved:
+            self._ws_url = old_url
+            return Err("Failed to save connection port config")
+        restarted = new_url != old_url
+        if restarted:
+            await self._restart_bridge()
+            self.logger.info(f"[Config] WebSocket port set to {port_number}, bridge restarted: {new_url}")
+        else:
+            self.logger.info(f"[Config] WebSocket port unchanged: {new_url}")
+        return Ok({
+            "ws_url": self._ws_url,
+            "ws_port": str(port_number),
+            "restarted": restarted,
+            "saved": saved,
+        })
+
     @ui.action(id="diagnose_bridge", label=tr("actions.diagnose", default="Diagnose Bridge"), tone="primary", refresh_context=True)
     @plugin_entry(id="diagnose_bridge", name=tr("entries.diagnose.name", default="Diagnose Minecraft Bridge"), description="Diagnose the Minecraft bridge connection, mod config, assigned maid, and plugin-side companion mode. This does not diagnose N.E.K.O host model/TTS behavior.", input_schema={"type": "object", "properties": {}}, llm_result_fields=["status", "summary", "checks"])
     async def diagnose_bridge(self, **_):
@@ -483,24 +581,8 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._last_diagnostic = result
         return Ok(result)
 
-    @ui.action(id="set_companion_mode", label=tr("actions.setCompanionMode", default="Apply Mode"), tone="primary", refresh_context=True)
-    @plugin_entry(
-        id="set_companion_mode",
-        name=tr("entries.setCompanionMode.name", default="Set Companion Mode"),
-        description="Set plugin-side Minecraft companion activity preset. Custom fields only affect proactive companion speech frequency, not Minecraft awareness polling, push aggregation, anti-spam throttling, N.E.K.O host model, or TTS behavior.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "mode": {"type": "string", "enum": ["quiet", "standard", "active", "custom"], "description": "Companion activity preset"},
-                "playmate_quiet_stable_seconds": {"type": "string", "description": "Seconds of no relevant activity before companion speech can trigger"},
-                "playmate_quiet_cooldown": {"type": "string", "description": "Seconds between quiet companion speech attempts"},
-                "playmate_suggestion_cooldown": {"type": "string", "description": "Seconds between proactive suggestion speech attempts"},
-            },
-            "required": ["mode"],
-        },
-        llm_result_fields=["companion_mode", "companion_settings"],
-    )
-    async def set_companion_mode(self, *, mode="", **kwargs):
+    @ui.action(id="apply_speech_frequency_preset", label=tr("actions.applySpeechPreset", default="Apply Preset"), tone="primary", refresh_context=True)
+    async def apply_speech_frequency_preset(self, *, mode="", **kwargs):
         mode = _config._normalize_companion_mode(mode, self)
         self._companion_mode = mode
         _config._apply_companion_mode(self)
@@ -521,22 +603,6 @@ class NekoMinecraftPlugin(NekoPluginBase):
         })
 
     @ui.action(id="set_plan_board", label=tr("actions.setPlanBoard", default="Update Goal Board"), tone="primary", refresh_context=True)
-    @plugin_entry(
-        id="set_plan_board",
-        name=tr("entries.setPlanBoard.name", default="Update Goal Board"),
-        description="Update the plugin-side Minecraft goal board shown in the HUD. This is a bridge-local board, not the N.E.K.O host task system.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "Goal board title"},
-                "append_step": {"type": "string", "description": "Single step to append"},
-                "completed_step": {"type": "string", "description": "1-based step number to mark done"},
-                "uncompleted_step": {"type": "string", "description": "1-based step number to mark pending"},
-                "clear": {"type": "boolean", "description": "Clear the current board"},
-            },
-        },
-        llm_result_fields=["success", "title", "total_steps", "completed_steps", "pending_steps", "plan"],
-    )
     async def set_plan_board(self, *, title=None, append_step="", completed_step="", uncompleted_step="", clear=False, **_):
         completed_steps = _parse_step_index(completed_step)
         uncompleted_steps = _parse_step_index(uncompleted_step)

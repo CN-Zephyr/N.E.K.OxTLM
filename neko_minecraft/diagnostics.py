@@ -56,6 +56,7 @@ async def diagnose_bridge(plugin):
             f"尚未连接到 {plugin._ws_url}。",
             "确认 Minecraft 已进入世界且未暂停；检查 mod 是否安装、端口是否一致、是否被占用。",
         ))
+        _append_bridge_error_check(plugin, checks)
 
     if len(plugin._request_futures) > 3:
         checks.append(_check(
@@ -124,6 +125,31 @@ async def _diagnose_connected(plugin, checks):
             f"配置中的女仆 ID 未在当前世界找到：{plugin._assigned_maid_id}",
             "可能换了存档或女仆已死亡/不存在；请在面板中重新指定。",
         ))
+
+
+def _append_bridge_error_check(plugin, checks):
+    bridge = getattr(plugin, "_bridge", None)
+    if not bridge:
+        return
+    error_type = getattr(bridge, "last_error_type", "")
+    if not error_type:
+        return
+    error_message = getattr(bridge, "last_error_message", "")
+    retry_delay = getattr(bridge, "next_reconnect_delay", 0)
+    retry_text = f"下一次自动重连约 {retry_delay} 秒后。" if retry_delay else ""
+    if error_type == "InvalidMessage":
+        checks.append(_check(
+            "warning",
+            "最近连接错误",
+            f"端口有响应，但不是有效的 WebSocket 握手：{error_message}。{retry_text}",
+            "通常是 Minecraft mod WebSocket 尚未完全启动、端口配置不一致，或 48920 被其它程序占用。可在游戏内确认 N.E.K.O 模式已启用并进入存档；必要时换一个端口并让插件 UI 与 mod 配置保持一致。",
+        ))
+        return
+    checks.append(_check(
+        "info",
+        "最近连接错误",
+        f"{error_type}: {error_message}。{retry_text}",
+    ))
 
 
 def _append_config_checks(checks, config_result, status_ok):

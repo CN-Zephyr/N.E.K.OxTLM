@@ -7,6 +7,8 @@
   "connection.pluginNotEnabled": "Plugin Not Enabled",
   "connection.pluginNotEnabledHint": "The plugin has not started yet. Please enable this plugin in N.E.K.O, then click the refresh button to reload.",
   "connection.wsUrl": "WebSocket URL",
+  "connection.port": "Connection Port",
+  "connection.portHelp": "Change the port this plugin uses to connect to the Minecraft-side WebSocket. It must match the in-game N.E.K.O bridge config.",
   "connection.companionMode": "Companion Mode",
   "companion.title": "Companion Activity",
   "companion.description": "Switch this plugin's proactive companion speech frequency.",
@@ -62,7 +64,8 @@
   "maid.connectFirstHint": "Connect to Minecraft first before assigning a maid.",
   "actions.refresh": "Refresh Status",
   "actions.diagnose": "Diagnose Bridge",
-  "actions.setCompanionMode": "Apply Preset",
+  "actions.setConnectionPort": "Save Port",
+  "actions.applySpeechPreset": "Apply Preset",
   "actions.assignMaid": "Select Maid",
   "actions.setPlanBoard": "Update Goal Board",
   "actions.updatePlanTitle": "Update Title",
@@ -70,8 +73,6 @@
   "actions.completePlanStep": "Mark Done",
   "actions.reopenPlanStep": "Mark Pending",
   "actions.clearPlan": "Clear Board",
-  "entries.setCompanionMode.name": "Set Companion Activity",
-  "entries.setPlanBoard.name": "Update Goal Board",
   "yes": "Yes",
   "no": "No"
 }

@@ -9,7 +9,7 @@ import threading
 import time
 
 import websockets
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidMessage
 
 
 def _is_java_running():
@@ -38,16 +38,23 @@ def _is_java_running():
 
 
 class WSBridge:
-    def __init__(self, ws_url, logger, heartbeat_interval=30):
+    def __init__(self, ws_url, logger, heartbeat_interval=30, reconnect_interval=5, max_reconnect_interval=60):
         self.ws_url = ws_url
         self._logger = logger
         self._heartbeat_interval = heartbeat_interval
+        self._reconnect_interval = max(1, int(reconnect_interval or 5))
+        self._max_reconnect_interval = max(self._reconnect_interval, int(max_reconnect_interval or 60))
+        self._handshake_retry_interval = min(max(self._reconnect_interval, 10), self._max_reconnect_interval)
         self._loop = None
         self._thread = None
         self._ws = None
         self.connected = False
         self._running = False
         self.mc_exited = False
+        self.last_error_type = ""
+        self.last_error_message = ""
+        self.last_error_time = 0
+        self.next_reconnect_delay = 0
         self._send_queue = queue.Queue()
         self._recv_queue = queue.Queue()
 
@@ -82,6 +89,11 @@ class WSBridge:
                 break
         return messages
 
+    def _record_error(self, error):
+        self.last_error_type = type(error).__name__
+        self.last_error_message = str(error)
+        self.last_error_time = time.time()
+
     def _run(self):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
@@ -93,7 +105,7 @@ class WSBridge:
             self._loop.close()
 
     async def _connect_loop(self):
-        delay = 5
+        delay = self._reconnect_interval
         while self._running:
             try:
                 self._logger.info(f"[WSBridge] Connecting to {self.ws_url}...")
@@ -104,14 +116,28 @@ class WSBridge:
                     close_timeout=3,
                 )
                 self.connected = True
-                delay = 5
+                delay = self._reconnect_interval
+                self.next_reconnect_delay = 0
+                self.last_error_type = ""
+                self.last_error_message = ""
+                self.last_error_time = 0
                 self._logger.info("[WSBridge] Connected to Minecraft!")
                 await self._listen()
             except ConnectionClosed as e:
+                self._record_error(e)
                 self._logger.info(f"[WSBridge] Connection closed: {e}")
+            except InvalidMessage as e:
+                self._record_error(e)
+                self._logger.warning(
+                    f"[WSBridge] Invalid WebSocket response from {self.ws_url}: {e}. "
+                    "The port is open, but it did not complete a WebSocket handshake; "
+                    "check whether the Minecraft mod server is still starting, the port is wrong, or another program is using it."
+                )
             except OSError as e:
+                self._record_error(e)
                 self._logger.warning(f"[WSBridge] OS error: {e}")
             except Exception as e:
+                self._record_error(e)
                 self._logger.warning(f"[WSBridge] Error: {type(e).__name__}: {e}")
             finally:
                 self.connected = False
@@ -122,10 +148,17 @@ class WSBridge:
                     self._logger.info("[WSBridge] Java process not found, MC has exited")
                     self.mc_exited = True
                     break
-                self._logger.info(f"[WSBridge] Reconnecting in {delay}s...")
+                handshake_failed = self.last_error_type == "InvalidMessage"
+                reconnect_delay = self._handshake_retry_interval if handshake_failed else delay
+                reconnect_delay = min(max(1, reconnect_delay), self._max_reconnect_interval)
+                self.next_reconnect_delay = reconnect_delay
+                self._logger.info(f"[WSBridge] Reconnecting in {reconnect_delay}s...")
                 try:
-                    await asyncio.sleep(delay)
-                    delay = min(delay * 2, 60)
+                    await asyncio.sleep(reconnect_delay)
+                    if handshake_failed:
+                        delay = self._reconnect_interval
+                    else:
+                        delay = min(reconnect_delay * 2, self._max_reconnect_interval)
                 except asyncio.CancelledError:
                     break
 

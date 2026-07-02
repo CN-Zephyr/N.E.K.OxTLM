@@ -16,7 +16,7 @@ class QuietCompanionTrigger:
             self._state = state
             self._state_since = now
             return None
-        if state in ("unknown", "combat", "away", "exploring", "danger_exploring", "gathering", "organizing", "trading"):
+        if state in ("combat", "away", "gathering", "organizing"):
             return None
         if recent_push_count > 2:
             return None

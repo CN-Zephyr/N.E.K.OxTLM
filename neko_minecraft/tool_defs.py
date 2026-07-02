@@ -5,7 +5,10 @@ MC_MAID_STATUS = {
     "description": (
         "查询你在Minecraft世界中女仆的当前状态。"
         "返回所有女仆的信息，包括id(UUID格式)、名字、血量、位置、是否坐着、是否跟随、主人名字、手持物品等。"
-        "返回数据还包含 available_tasks，可用于决定应该切换到哪个工作模式。"
+        "返回数据还包含 available_tasks 和 available_modes，可用于决定应该切换到哪个工作模式。"
+        "当玩家询问'有哪些模式/工作/能切换什么'时，必须先调用此工具，然后只按 available_modes 里的 id/name 回答；"
+        "不要把搭房子、下矿洞、整理背包等未出现在 available_modes 中的玩法目标说成工作模式。"
+        "当玩家询问'现在什么模式/你是什么模式/什么模式'时，必须先调用此工具，并按 current_mode/current_mode_answer 或 selected_maid.current_mode 回答真实当前模式。"
         "当玩家要求切换工作/模式但你不确定具体任务ID或任务名时，先调用此工具查看可用模式，再调用 mc_switch_task；不要直接反问玩家。"
     ),
     "parameters": {
@@ -63,11 +66,13 @@ MC_SWITCH_TASK = {
         "task参数优先传 available_tasks 中的精确任务ID或任务名称；如果还没查过可用任务，可先调用 mc_maid_status。"
         "也可以传玩家描述的工作内容（如'收菜'、'收获'、'打草'、'收甘蔗'、'种田'、'攻击'、'待机'、'小游戏'），插件会尽力匹配，但不同 mod 的任务名可能不同，精确ID/名称更可靠。"
         "调用成功后工具会再次查询女仆状态验证 current_task 是否真的切换到 expected_task；请根据 verified 字段判断是否已经生效。"
+        "如果返回 TASK_SWITCH_VERIFY_FAILED 或 verified=false，表示真实当前模式不是目标模式，不能说已经切换成功或正在执行目标任务。"
         "如果返回 TASK_SWITCH_RECOVERABLE，说明这次没切成但会返回 available_tasks 和 retry_hint；应立刻选择最接近的精确 id/name 再次调用本工具，不要只口头说明失败。"
         "【必须调用】只要玩家明确要求你开始、停止或更换游戏内工作模式，就必须调用本工具，不能只用文字答应，也不要先反问。"
         "【短命令也必须调用】玩家只说'收菜'、'收获'、'打草'、'种田'、'打怪'、'休息'、'待机'、'下棋'时，已经是明确模式切换意图。"
         "【承接上下文】如果玩家先说过'收菜'，随后说'切换模式'、'换模式'、'切模式'，应承接上一轮工作意图并调用本工具；不知道具体模式ID时先调用 mc_maid_status 查 available_tasks。"
         "典型必须调用场景：'打怪/保护我/清怪'、'收菜/收获/收作物/种田/收田/收甘蔗/打草'、'剪羊毛/挤奶/喂动物'、'来玩游戏/下棋/小游戏'、'停下/休息/待机'。"
+        "这些典型场景只是理解玩家意图的例子，不是可用工作模式列表；回答'有哪些模式'时禁止引用这些例子，必须先用 mc_maid_status 的 available_modes。"
         "下矿/探洞/挖矿没有真正的挖矿工作模式时，应优先切换到'火把/照明'这类辅助模式；如果没有可用照明模式，则至少配合 mc_switch_follow 和 mc_switch_sit 参与行动。"
         "如果玩家要求女仆打怪、杀怪，切换到攻击模式即可（如'攻击'、'打怪'），女仆会自行搜索并攻击附近的敌对生物。"
         "【重要】切换到攻击模式前，应先调用 mc_game_context(category='equipment') 检查女仆主手是否有武器。如果主手为空或只有非武器物品，应提醒玩家给女仆装备武器后再切换。"
@@ -107,7 +112,11 @@ MC_EQUIP_ITEM = {
     "name": "mc_equip_item",
     "description": (
         "将女仆背包中的物品装备到主手。"
-        "item=物品ID（如item=minecraft:diamond_sword）或slot=背包槽位编号指定物品。"
+        "item=物品ID（如item=minecraft:torch、minecraft:diamond_sword）或slot=背包槽位编号指定物品。"
+        "玩家说'举火把'、'拿火把'、'换火把'、'把火把拿手上'时，应该调用本工具装备 minecraft:torch，而不是只切换工作模式。"
+        "本工具会在装备后重新查询状态验证 main_hand_item；只有 verified=true 才表示主手真的切换成功。"
+        "如果返回 EQUIP_VERIFY_FAILED 或 verified=false，不能告诉玩家已经拿好了，必须说明当前主手实际物品并重试或提醒检查背包。"
+        "'插火把/照明模式'是工作模式切换，使用 mc_switch_task；'举火把/拿火把'是主手装备，使用本工具。"
     ),
     "parameters": {
         "type": "object",
@@ -218,7 +227,10 @@ MC_SET_PLAN = {
     "name": "mc_set_plan",
     "description": (
         "设置或更新游戏内右上角显示的当前 Minecraft 目标板。"
+        "这是显示/记录工具，不是行动工具；不能用它代替 mc_switch_task、mc_switch_follow、mc_switch_sit。"
         "这是插件侧的轻量目标板，只负责保存、显示和注入当前游戏目标；不要把它当作 N.E.K.O 宿主的长期任务系统。"
+        "仅在玩家明确要求记录/显示/更新目标板，或已经讨论了多步骤 Minecraft 目标时调用。"
+        "不要在普通工作模式切换后顺手调用；例如玩家只说'去打怪'、'收菜'、'休息'时，只应调用 mc_switch_task，禁止调用本工具。"
         "新建目标时优先传 title 和 steps；完成进度变化时传 completed_steps 或 uncompleted_steps（1 基序号）；"
         "追加步骤时传 append_steps；clear=true 或 plan='' 可清除目标板。"
         "兼容旧用法：plan 参数仍可传多行文本，系统会解析成结构化目标板并显示。"

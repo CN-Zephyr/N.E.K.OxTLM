@@ -102,28 +102,6 @@ def load_config(plugin):
         except Exception as e:
             plugin.logger.warning(f"Failed to load plugin.toml: {e}")
 
-    try:
-        config_path = plugin.config_dir / "config.json"
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            plugin._ws_url = config.get("ws_url", plugin._ws_url)
-            plugin._heartbeat_interval = config.get("heartbeat_interval", plugin._heartbeat_interval)
-            plugin._reconnect_interval = config.get("reconnect_interval", plugin._reconnect_interval)
-            plugin._max_reconnect_interval = config.get("max_reconnect_interval", plugin._max_reconnect_interval)
-            plugin._assigned_maid_id = config.get("assigned_maid_id", "")
-            plugin._assigned_maid_name = config.get("assigned_maid_name", "")
-            plugin._awareness_interval = config.get("awareness_interval", plugin._awareness_interval)
-            plugin._companion_mode = _normalize_companion_mode(
-                config.get("companion_mode", plugin._companion_mode),
-                plugin,
-            )
-            _load_plan_config(plugin, config)
-            _load_playmate_config(plugin, config)
-            _apply_companion_mode(plugin)
-    except Exception as e:
-        plugin.logger.warning(f"Failed to load config: {e}")
-
 
 def _load_plan_config(plugin, config):
     state = _plan.normalize_plan_state(config.get("structured_plan", {}))
@@ -200,8 +178,28 @@ def companion_settings(plugin):
     }
 
 
+def _runtime_config_payload(plugin):
+    payload = {
+        "ws_url": plugin._ws_url,
+        "heartbeat_interval": getattr(plugin, "_heartbeat_interval", 30),
+        "reconnect_interval": getattr(plugin, "_reconnect_interval", 5),
+        "max_reconnect_interval": getattr(plugin, "_max_reconnect_interval", 60),
+        "assigned_maid_id": plugin._assigned_maid_id,
+        "assigned_maid_name": plugin._assigned_maid_name,
+        "awareness_interval": getattr(plugin, "_awareness_interval", 5),
+        "companion_mode": getattr(plugin, "_companion_mode", "custom"),
+    }
+    for key in COMPANION_CUSTOM_FIELDS:
+        payload[key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
+    payload["current_plan"] = getattr(plugin, "_current_plan_text", "")
+    payload["structured_plan"] = _plan.normalize_plan_state(getattr(plugin, "_plan_state", {}))
+    return payload
+
+
 def save_config(plugin):
     toml_path = plugin.config_dir / "plugin.toml"
+    payload = _runtime_config_payload(plugin)
+    toml_saved = False
     try:
         try:
             import tomllib
@@ -217,15 +215,7 @@ def save_config(plugin):
                 existing = tomllib.load(f)
 
         existing.setdefault("minecraft_bridge", {})
-        existing["minecraft_bridge"]["assigned_maid_id"] = plugin._assigned_maid_id
-        existing["minecraft_bridge"]["assigned_maid_name"] = plugin._assigned_maid_name
-        existing["minecraft_bridge"]["companion_mode"] = getattr(plugin, "_companion_mode", "custom")
-        for key in COMPANION_CUSTOM_FIELDS:
-            existing["minecraft_bridge"][key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
-        existing["minecraft_bridge"]["current_plan"] = getattr(plugin, "_current_plan_text", "")
-        existing["minecraft_bridge"]["structured_plan"] = _plan.normalize_plan_state(
-            getattr(plugin, "_plan_state", {})
-        )
+        existing["minecraft_bridge"].update(payload)
 
         try:
             import tomlkit
@@ -234,39 +224,20 @@ def save_config(plugin):
                 doc.add(k, v)
             with open(toml_path, "w", encoding="utf-8") as f:
                 tomlkit.dump(doc, f)
-            return
+            toml_saved = True
         except ImportError:
-            pass
+            lines = []
+            for section_key, section_val in existing.items():
+                if not isinstance(section_val, dict):
+                    continue
+                _write_toml_section(lines, section_key, section_val)
 
-        lines = []
-        for section_key, section_val in existing.items():
-            if not isinstance(section_val, dict):
-                continue
-            _write_toml_section(lines, section_key, section_val)
-
-        with open(toml_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        return
+            with open(toml_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            toml_saved = True
     except Exception as e:
         plugin.logger.warning(f"Failed to save plugin.toml: {e}")
-
-    try:
-        config_path = plugin.config_dir / "config.json"
-        config = {}
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        config["assigned_maid_id"] = plugin._assigned_maid_id
-        config["assigned_maid_name"] = plugin._assigned_maid_name
-        config["companion_mode"] = getattr(plugin, "_companion_mode", "custom")
-        for key in COMPANION_CUSTOM_FIELDS:
-            config[key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))
-        config["current_plan"] = getattr(plugin, "_current_plan_text", "")
-        config["structured_plan"] = _plan.normalize_plan_state(getattr(plugin, "_plan_state", {}))
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        plugin.logger.warning(f"Failed to save config: {e}")
+    return toml_saved
 
 
 def sync_config(plugin, config_data):

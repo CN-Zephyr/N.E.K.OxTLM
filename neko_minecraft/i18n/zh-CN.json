@@ -7,6 +7,8 @@
   "connection.pluginNotEnabled": "插件未启用",
   "connection.pluginNotEnabledHint": "插件尚未启动，请先在 N.E.K.O 中启用此插件，然后点击刷新按钮重新加载。",
   "connection.wsUrl": "WebSocket 地址",
+  "connection.port": "连接端口",
+  "connection.portHelp": "修改本插件连接 Minecraft 侧 WebSocket 的端口，需要和游戏内 N.E.K.O 桥接配置一致。",
   "connection.companionMode": "陪玩活跃度",
   "companion.title": "陪玩活跃度",
   "companion.description": "切换本插件侧女仆主动搭话频率。",
@@ -62,7 +64,8 @@
   "maid.connectFirstHint": "请先连接到 Minecraft 再指定女仆。",
   "actions.refresh": "刷新状态",
   "actions.diagnose": "诊断桥接",
-  "actions.setCompanionMode": "应用预设",
+  "actions.setConnectionPort": "保存端口",
+  "actions.applySpeechPreset": "应用预设",
   "actions.assignMaid": "选择女仆",
   "actions.setPlanBoard": "更新目标板",
   "actions.updatePlanTitle": "更新标题",
@@ -70,8 +73,6 @@
   "actions.completePlanStep": "标记完成",
   "actions.reopenPlanStep": "标记未完成",
   "actions.clearPlan": "清空目标板",
-  "entries.setCompanionMode.name": "设置陪玩活跃度",
-  "entries.setPlanBoard.name": "更新目标板",
   "yes": "是",
   "no": "否"
 }

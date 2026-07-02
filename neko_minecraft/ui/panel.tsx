@@ -31,6 +31,7 @@ type MaidInfo = {
 type State = {
   connected: boolean
   ws_url: string
+  ws_port: string
   maids: MaidInfo[]
   assigned_maid_id: string
   assigned_maid_name: string
@@ -78,6 +79,8 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const { t, state, actions, useLocalState } = props
 
   const connected = state?.connected ?? false
+  const wsUrl = state?.ws_url ?? ""
+  const wsPort = state?.ws_port ?? ""
   const maids = state?.maids ?? []
   const assignedId = state?.assigned_maid_id ?? ""
   const assignedName = state?.assigned_maid_name ?? ""
@@ -89,6 +92,7 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const diagnostic = state?.last_diagnostic ?? null
 
   const [selectedMaidId, setSelectedMaidId] = useLocalState<string>("selectedMaidId", "")
+  const [connectionPort, setConnectionPort] = useState<string>(wsPort)
   const [planTitle, setPlanTitle] = useState<string>(planState.title || "")
   const [planAppendStep, setPlanAppendStep] = useState<string>("")
   const [selectedPlanStep, setSelectedPlanStep] = useState<string>("")
@@ -97,6 +101,10 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const [customQuietStableSeconds, setCustomQuietStableSeconds] = useState<string>(settingText("playmate_quiet_stable_seconds"))
   const [customQuietCooldown, setCustomQuietCooldown] = useState<string>(settingText("playmate_quiet_cooldown"))
   const [customSuggestionCooldown, setCustomSuggestionCooldown] = useState<string>(settingText("playmate_suggestion_cooldown"))
+
+  useEffect(() => {
+    setConnectionPort(wsPort)
+  }, [wsPort])
 
   useEffect(() => {
     setSelectedCompanionMode(companionMode)
@@ -118,8 +126,9 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const assignAction = actions.find((a) => a.id === "assign_maid") as HostedAction | undefined
   const refreshAction = actions.find((a) => a.id === "refresh_maid_status") as HostedAction | undefined
   const diagnoseAction = actions.find((a) => a.id === "diagnose_bridge") as HostedAction | undefined
-  const setCompanionModeAction = actions.find((a) => a.id === "set_companion_mode") as HostedAction | undefined
-  const setPlanBoardAction = actions.find((a) => a.id === "set_plan_board") as HostedAction | undefined
+  const setConnectionPortAction = actions.find((a) => a.id === "set_connection_port" || a.entry_id === "set_connection_port") as HostedAction | undefined
+  const applySpeechPresetAction = actions.find((a) => a.id === "apply_speech_frequency_preset" || a.entry_id === "apply_speech_frequency_preset") as HostedAction | undefined
+  const setPlanBoardAction = actions.find((a) => a.id === "set_plan_board" || a.entry_id === "set_plan_board") as HostedAction | undefined
 
   const companionModeOptions = ["quiet", "standard", "active", "custom"].map((mode) => ({
     value: mode,
@@ -175,12 +184,23 @@ export default function Panel(props: PluginSurfaceProps<State>) {
           </StatusBadge>
           <KeyValue
             items={[
-              { key: t("connection.wsUrl"), value: state?.ws_url ?? "-" },
+              { key: t("connection.wsUrl"), value: wsUrl || "-" },
               { key: t("connection.companionMode"), value: t(`companionMode.${companionMode}`) },
             ]}
           />
+          <Field label={t("connection.port")} help={t("connection.portHelp")}>
+            <Input value={connectionPort} onChange={setConnectionPort} />
+          </Field>
           <Stack direction="horizontal">
             <RefreshButton />
+            {setConnectionPortAction && connectionPort.trim() && (
+              <ActionButton
+                action={setConnectionPortAction}
+                values={{ port: connectionPort.trim() }}
+              >
+                {t("actions.setConnectionPort")}
+              </ActionButton>
+            )}
             {refreshAction && (
               <ActionButton action={refreshAction}>{t("actions.refresh")}</ActionButton>
             )}
@@ -214,15 +234,15 @@ export default function Panel(props: PluginSurfaceProps<State>) {
               </Field>
             </Stack>
           )}
-          {setCompanionModeAction && (
+          {applySpeechPresetAction && (
             <ActionButton
-              action={setCompanionModeAction}
+              action={applySpeechPresetAction}
               values={{
                 mode: effectiveCompanionMode,
                 ...(effectiveCompanionMode === "custom" ? customCompanionValues : {}),
               }}
             >
-              {t("actions.setCompanionMode")}
+              {t("actions.applySpeechPreset")}
             </ActionButton>
           )}
         </Stack>
