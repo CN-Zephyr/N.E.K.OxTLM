@@ -188,19 +188,30 @@ export default function Panel(props: PluginSurfaceProps<State>) {
               { key: t("connection.companionMode"), value: t(`companionMode.${companionMode}`) },
             ]}
           />
-          <Field label={t("connection.port")} help={t("connection.portHelp")}>
-            <Input value={connectionPort} onChange={setConnectionPort} />
-          </Field>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: setConnectionPortAction ? "minmax(180px, 2fr) minmax(140px, 1fr)" : "1fr",
+              gap: "12px",
+              alignItems: "start",
+            }}
+          >
+            <Field label={t("connection.port")} help={t("connection.portHelp")}>
+              <Input value={connectionPort} onChange={setConnectionPort} />
+            </Field>
+            {setConnectionPortAction && (
+              <div style={{ paddingTop: "24px" }}>
+                <ActionButton
+                  action={setConnectionPortAction}
+                  values={{ port: connectionPort.trim() }}
+                >
+                  {t("actions.setConnectionPort")}
+                </ActionButton>
+              </div>
+            )}
+          </div>
           <Stack direction="horizontal">
             <RefreshButton />
-            {setConnectionPortAction && connectionPort.trim() && (
-              <ActionButton
-                action={setConnectionPortAction}
-                values={{ port: connectionPort.trim() }}
-              >
-                {t("actions.setConnectionPort")}
-              </ActionButton>
-            )}
             {refreshAction && (
               <ActionButton action={refreshAction}>{t("actions.refresh")}</ActionButton>
             )}
