@@ -47,6 +47,40 @@ def _event_coalesce_key(event_type):
     return _EVENT_COALESCE_KEYS.get(event_type)
 
 
+_UNDERGROUND_BIOME_STATES = {"mining", "underground_exploring"}
+_UNDERGROUND_EVENT_KEYS = (
+    "is_underground",
+    "maid_is_underground",
+    "player_is_underground",
+    "underground",
+)
+
+
+def _coerce_optional_bool(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "y", "on"):
+            return True
+        if lowered in ("false", "0", "no", "n", "off"):
+            return False
+    return None
+
+
+def _event_underground_hint(event_data):
+    for key in _UNDERGROUND_EVENT_KEYS:
+        if key in event_data:
+            value = _coerce_optional_bool(event_data.get(key))
+            if value is not None:
+                return value
+    return None
+
+
 def _parse_step_index(value):
     value = str(value or "").strip()
     if not value:
@@ -126,11 +160,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._playmate = PlaymateContextManager(self)
         self._awareness = AwarenessManager(self)
 
-    def _load_config(self):
-        _config.load_config(self)
+    async def _load_config(self):
+        await _config.load_config(self)
 
-    def _save_config(self):
-        return _config.save_config(self)
+    async def _save_config(self):
+        return await _config.save_config(self)
 
     def _refresh_playmate_modules(self):
         self._minecraft_push = MinecraftPushRouter(
@@ -174,7 +208,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
 
     @lifecycle(id="startup")
     async def on_startup(self, **_):
-        self._load_config()
+        await self._load_config()
         self._refresh_playmate_modules()
         self.logger.info(f"Python {sys.version}")
         self.logger.info(f"Event loop: {type(asyncio.get_event_loop())}")
@@ -226,6 +260,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
                         self.logger.info("[Poll] MC has exited, cleaning up plugin resources")
                         self._awareness.stop()
                         self._bridge.stop()
+                        await self._minecraft_push.flush()
                         self._instructions_injected = False
                         os._exit(0)
                     is_connected = self._bridge.connected
@@ -282,7 +317,17 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 }, timeout=5)
             except Exception:
                 pass
-        if self._current_plan_text and self._bridge and self._bridge.connected:
+        # 目标板双向同步：先查询 MC 端，有则采用 MC 端的；无则推送插件侧的
+        try:
+            plan_result = await self._send_request({"type": "get_plan"}, timeout=5)
+            mc_plan = ""
+            if plan_result.get("type") == "plan_result":
+                mc_plan = plan_result.get("data", {}).get("plan", "")
+        except Exception:
+            mc_plan = ""
+        if mc_plan:
+            await self._apply_plan_text(mc_plan, save=True)
+        elif self._current_plan_text and self._bridge and self._bridge.connected:
             self._bridge.send({
                 "type": "set_plan",
                 "data": {"plan": self._current_plan_text},
@@ -322,7 +367,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return
         if msg_type == "plan_update":
             plan_text = data.get("data", {}).get("plan", "")
-            self._apply_plan_text(plan_text, save=True)
+            await self._apply_plan_text(plan_text, save=True)
             return
         if msg_type == "event":
             await self._handle_event(data)
@@ -353,6 +398,18 @@ class NekoMinecraftPlugin(NekoPluginBase):
         if parts_text is None:
             return
         event_type = event_data.get("event_type", "event")
+        if event_type == "biome_change" and self._should_suppress_biome_change_event(event_data):
+            biome = str(event_data.get("biome", ""))
+            text = f"Suppressed underground biome_change: {biome}"
+            self._playmate_debug.record(
+                "event",
+                event_type=event_type,
+                priority=0,
+                text=text,
+                route="suppressed_underground_biome",
+            )
+            self.logger.info(f"[Event] {text}")
+            return
         debug_base = {"event_type": event_type, "priority": priority, "text": parts_text[:160]}
         if side_effects:
             if "pending_revenge" in side_effects:
@@ -436,22 +493,22 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return self._assigned_maid_id
         return self._get_cached_maid_id()
 
-    def _apply_plan_state(self, state, save=False):
+    async def _apply_plan_state(self, state, save=False):
         self._plan_state = _plan.normalize_plan_state(state)
         self._current_plan_text = _plan.plan_to_text(self._plan_state)
         if self._playmate:
             self._playmate._current_plan = self._current_plan_text
         if save:
-            self._save_config()
+            await self._save_config()
         return self._current_plan_text
 
-    def _apply_plan_text(self, plan_text, save=False):
+    async def _apply_plan_text(self, plan_text, save=False):
         self._current_plan_text = str(plan_text or "")
         self._plan_state = _plan.plan_from_text(self._current_plan_text)
         if self._playmate:
             self._playmate._current_plan = self._current_plan_text
         if save:
-            self._save_config()
+            await self._save_config()
         return self._current_plan_text
 
     def _get_cached_maid_id(self):
@@ -463,7 +520,17 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 return first_id.get("id", "")
         return ""
 
-    # ── UI context & actions ──
+    def _should_suppress_biome_change_event(self, event_data):
+        explicit = _event_underground_hint(event_data or {})
+        if explicit is not None:
+            return explicit
+        awareness_state = getattr(self._awareness, "_last_awareness_state", {}) or {}
+        if awareness_state.get("is_underground"):
+            return True
+        activity = getattr(getattr(self._playmate, "activity", None), "stable_state", "unknown")
+        return activity in _UNDERGROUND_BIOME_STATES
+
+    # ── UI 上下文与 actions ──
 
     @ui.context(id="dashboard")
     async def dashboard_context(self, **_):
@@ -521,7 +588,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
             return Err("maid_id is required")
         self._assigned_maid_id = maid_id
         self._assigned_maid_name = maid_name
-        self._save_config()
+        await self._save_config()
         self._instructions_injected = False
         self.logger.info(f"[Config] Assigned maid: {maid_name} ({maid_id})")
         if self._bridge and self._bridge.connected and maid_id:
@@ -557,7 +624,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         old_url = self._ws_url
         new_url = _ws_url_with_port(old_url, port_number)
         self._ws_url = new_url
-        saved = self._save_config()
+        saved = await self._save_config()
         if not saved:
             self._ws_url = old_url
             return Err("Failed to save connection port config")
@@ -582,6 +649,21 @@ class NekoMinecraftPlugin(NekoPluginBase):
         return Ok(result)
 
     @ui.action(id="apply_speech_frequency_preset", label=tr("actions.applySpeechPreset", default="Apply Preset"), tone="primary", refresh_context=True)
+    @plugin_entry(
+        id="apply_speech_frequency_preset",
+        name=tr("entries.applySpeechPreset.name", default="Apply Speech Frequency Preset"),
+        description="Apply a companion mode preset (quiet/standard/active) or custom companion speech frequency settings from the UI panel.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "mode": {"type": "string", "description": "Companion mode: quiet, standard, active, or custom"},
+                "playmate_quiet_stable_seconds": {"type": "integer", "description": "Custom: seconds of quiet before companion speech can trigger"},
+                "playmate_quiet_cooldown": {"type": "integer", "description": "Custom: minimum interval between idle-state proactive messages"},
+                "playmate_suggestion_cooldown": {"type": "integer", "description": "Custom: minimum interval between proactive suggestion messages"},
+            },
+            "required": ["mode"],
+        },
+    )
     async def apply_speech_frequency_preset(self, *, mode="", **kwargs):
         mode = _config._normalize_companion_mode(mode, self)
         self._companion_mode = mode
@@ -595,7 +677,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._refresh_playmate_modules()
         if was_awareness_running:
             self._awareness.start()
-        self._save_config()
+        await self._save_config()
         self.logger.info(f"[Config] Companion mode set to {mode}")
         return Ok({
             "companion_mode": mode,
@@ -603,20 +685,39 @@ class NekoMinecraftPlugin(NekoPluginBase):
         })
 
     @ui.action(id="set_plan_board", label=tr("actions.setPlanBoard", default="Update Goal Board"), tone="primary", refresh_context=True)
-    async def set_plan_board(self, *, title=None, append_step="", completed_step="", uncompleted_step="", clear=False, **_):
+    @plugin_entry(
+        id="set_plan_board",
+        name=tr("entries.setPlanBoard.name", default="Update Goal Board"),
+        description="Update the Minecraft goal board from the UI panel: set title, append a step, mark steps complete/incomplete, or clear.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "New title for the goal board"},
+                "plan": {"type": "string", "description": "Full plan text. Empty string clears the goal board"},
+                "append_step": {"type": "string", "description": "Step text to append"},
+                "completed_step": {"type": "string", "description": "1-based step number to mark as completed"},
+                "uncompleted_step": {"type": "string", "description": "1-based step number to mark as incomplete"},
+                "clear": {"type": "boolean", "description": "Clear the entire goal board"},
+            },
+            "required": [],
+        },
+    )
+    async def set_plan_board(self, *, plan=None, title=None, append_step="", completed_step="", uncompleted_step="", clear=False, **_):
         completed_steps = _parse_step_index(completed_step)
         uncompleted_steps = _parse_step_index(uncompleted_step)
         append_steps = [append_step] if str(append_step or "").strip() else None
+        clear_flag = _coerce_optional_bool(clear)
         return await _tools.do_set_plan(
             self,
+            plan=plan,
             title=title,
             append_steps=append_steps,
             completed_steps=completed_steps,
             uncompleted_steps=uncompleted_steps,
-            clear=bool(clear),
+            clear=bool(clear_flag),
         )
 
-    # ── LLM Tools ──
+    # ── LLM 工具 ──
 
     @llm_tool(**MC_MAID_STATUS)
     async def mc_maid_status(self, **_):

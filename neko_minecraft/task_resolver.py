@@ -27,7 +27,7 @@ def resolve_task_name(task, available_tasks=None):
         return task
     if available_tasks:
         return fuzzy_match_task(task, available_tasks)
-    # No available_tasks — try synonym lookup to get short_id
+    # 无 available_tasks — 尝试通过同义词查找获取 short_id
     short_id = _synonym_lookup(task)
     if short_id:
         return f"touhou_little_maid:{short_id}"

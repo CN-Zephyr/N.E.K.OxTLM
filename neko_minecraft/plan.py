@@ -1,8 +1,7 @@
-"""Structured in-session Minecraft plan state.
+"""会话内的结构化 Minecraft 目标板状态。
 
-This module deliberately keeps planning small and game-scoped. N.E.K.O remains
-responsible for reasoning and conversation; the plugin only stores, renders, and
-syncs the current Minecraft goal board to the HUD/context.
+本模块有意将计划功能保持轻量且限定在游戏范围内。N.E.K.O 宿主负责推理和
+对话；插件只负责存储、渲染当前 Minecraft 目标板，并同步到 HUD 和上下文。
 """
 
 import re

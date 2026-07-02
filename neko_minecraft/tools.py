@@ -581,5 +581,5 @@ async def do_set_plan(plugin, *, plan=None, title=None, steps=None, completed_st
     result_data = result.get("data", {})
     if result_data.get("success") is False:
         return Err(result_data.get("error", "Set plan failed"))
-    plugin._apply_plan_state(plan_state, save=True)
+    await plugin._apply_plan_state(plan_state, save=True)
     return Ok({"success": True, **_plan.plan_summary(plan_state)})

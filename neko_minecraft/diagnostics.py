@@ -1,11 +1,10 @@
-"""Minecraft bridge diagnostics.
+"""Minecraft 桥接诊断。
 
-This intentionally diagnoses only the plugin/mod boundary. Host-level N.E.K.O
-model routing, TTS, and global tool-calling policy remain outside this plugin.
+本模块只诊断插件与 mod 的边界问题。宿主侧的 N.E.K.O 模型路由、TTS、
+全局工具调用策略不在本插件的诊断范围内。
 """
 
-import subprocess
-import sys
+from .bridge import _is_java_running as _bridge_is_java_running
 
 
 def _check(status, title, detail, suggestion=""):
@@ -229,24 +228,4 @@ def _summary(status):
 
 
 def _is_java_running():
-    try:
-        if sys.platform == "win32":
-            result = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq javaw.exe", "/NH"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if "javaw.exe" in result.stdout:
-                return True
-            result = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq java.exe", "/NH"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return "java.exe" in result.stdout
-        result = subprocess.run(["pgrep", "-x", "java"], capture_output=True, timeout=5)
-        return result.returncode == 0
-    except Exception:
-        return True
+    return _bridge_is_java_running()

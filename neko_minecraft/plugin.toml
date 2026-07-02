@@ -67,6 +67,18 @@ name = "Save Bridge Port"
 description = "Save the plugin UI connection port for the Minecraft WebSocket bridge. Only use when explicitly changing the bridge port; this is not a gameplay or maid-control action."
 kind = "action"
 
+[[plugin.entries]]
+id = "apply_speech_frequency_preset"
+name = "Apply Speech Frequency Preset"
+description = "Apply a companion mode preset or custom companion speech frequency settings from the plugin UI panel."
+kind = "action"
+
+[[plugin.entries]]
+id = "set_plan_board"
+name = "Update Goal Board"
+description = "Update the Minecraft goal board from the plugin UI panel."
+kind = "action"
+
 [minecraft_bridge]
 ws_url = "ws://127.0.0.1:48920"
 heartbeat_interval = 30

@@ -69,6 +69,7 @@ public class NekoTlmBridge {
         SkillHandler skillHandler = new SkillHandler(server);
         ConfigHandler configHandler = new ConfigHandler(server);
         SetPlanHandler setPlanHandler = new SetPlanHandler();
+        GetPlanHandler getPlanHandler = new GetPlanHandler();
 
         // Create router and register handlers
         java.util.Map<String, MessageHandlerInterface> handlers = new java.util.LinkedHashMap<>();
@@ -82,6 +83,7 @@ public class NekoTlmBridge {
         handlers.put(Protocol.TYPE_GET_CONFIG, configHandler);
         handlers.put(Protocol.TYPE_SET_MONITORED_MAID, configHandler);
         handlers.put(Protocol.TYPE_SET_PLAN, setPlanHandler);
+        handlers.put(Protocol.TYPE_GET_PLAN, getPlanHandler);
         messageRouter = new MessageRouter(handlers);
 
         // Create WebSocket server

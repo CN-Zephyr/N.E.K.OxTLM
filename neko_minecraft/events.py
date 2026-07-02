@@ -189,7 +189,7 @@ def format_event(event_data, assigned_maid_id):
     maid_id = event_data.get("maid_id", "")
     maid_name = event_data.get("maid_name", "")
 
-    # Only filter by maid_id for events that carry one
+    # 仅对携带 maid_id 的事件进行过滤
     if maid_id:
         if assigned_maid_id and maid_id != assigned_maid_id:
             return None, None, None
@@ -338,7 +338,7 @@ def format_event(event_data, assigned_maid_id):
         if parts:
             parts_text = "，".join(parts) + "。即时情绪：被照顾或被需要，适合一句亲近但不夸张的回应。"
         else:
-            return None, None, None  # No actual changes, skip
+            return None, None, None  # 无实际变化，跳过
 
     elif event_type == "block_activity":
         priority = 2

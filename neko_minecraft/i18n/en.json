@@ -73,6 +73,8 @@
   "actions.completePlanStep": "Mark Done",
   "actions.reopenPlanStep": "Mark Pending",
   "actions.clearPlan": "Clear Board",
+  "entries.setPlanBoard.name": "Update Goal Board",
+  "entries.applySpeechPreset.name": "Apply Speech Frequency Preset",
   "yes": "Yes",
   "no": "No"
 }

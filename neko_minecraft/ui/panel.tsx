@@ -279,19 +279,48 @@ export default function Panel(props: PluginSurfaceProps<State>) {
         <Stack>
           {planSummary.total_steps > 0 || planState.title ? (
             <Stack>
-              <KeyValue
-                items={[
-                  { key: t("plan.boardTitle"), value: planState.title || "-" },
-                  { key: t("plan.progress"), value: `${planSummary.completed_steps}/${planSummary.total_steps}` },
-                ]}
-              />
-              {planState.steps.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  gap: "12px",
+                  alignItems: "start",
+                }}
+              >
                 <KeyValue
-                  items={planState.steps.map((step, index) => ({
-                    key: `${index + 1}. ${step.done ? t("plan.done") : t("plan.pending")}`,
-                    value: step.text,
-                  }))}
+                  items={[
+                    { key: t("plan.boardTitle"), value: planState.title || "-" },
+                    { key: t("plan.progress"), value: `${planSummary.completed_steps}/${planSummary.total_steps}` },
+                  ]}
                 />
+                {setPlanBoardAction && (
+                  <ActionButton
+                    action={setPlanBoardAction}
+                    values={{ plan: "" }}
+                  >
+                    {t("actions.clearPlan")}
+                  </ActionButton>
+                )}
+              </div>
+              {planState.steps.length > 0 && (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {planState.steps.map((step, index) => (
+                    <div
+                      key={`${index}-${step.text}`}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "96px minmax(0, 1fr)",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <StatusBadge tone={step.done ? "success" : "warning"}>
+                        {`${index + 1}. ${step.done ? t("plan.done") : t("plan.pending")}`}
+                      </StatusBadge>
+                      <Text>{step.text}</Text>
+                    </div>
+                  ))}
+                </div>
               )}
             </Stack>
           ) : (
@@ -301,31 +330,60 @@ export default function Panel(props: PluginSurfaceProps<State>) {
           {setPlanBoardAction && (
             <Stack>
               <Divider />
-              <Field label={t("plan.fields.title")}>
-                <Input value={planTitle} onChange={setPlanTitle} />
-              </Field>
-              <ActionButton
-                action={setPlanBoardAction}
-                values={{ title: planTitle }}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(120px, 160px)",
+                  gap: "12px",
+                  alignItems: "start",
+                }}
               >
-                {t("actions.updatePlanTitle")}
-              </ActionButton>
+                <Field label={t("plan.fields.title")}>
+                  <Input value={planTitle} onChange={setPlanTitle} />
+                </Field>
+                <div style={{ paddingTop: "24px" }}>
+                  <ActionButton
+                    action={setPlanBoardAction}
+                    values={{ title: planTitle }}
+                  >
+                    {t("actions.updatePlanTitle")}
+                  </ActionButton>
+                </div>
+              </div>
 
-              <Field label={t("plan.fields.appendStep")}>
-                <Input value={planAppendStep} onChange={setPlanAppendStep} />
-              </Field>
-              {planAppendStep.trim() && (
-                <ActionButton
-                  action={setPlanBoardAction}
-                  values={{ append_step: planAppendStep }}
-                  onResult={() => setPlanAppendStep("")}
-                >
-                  {t("actions.appendPlanStep")}
-                </ActionButton>
-              )}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(120px, 160px)",
+                  gap: "12px",
+                  alignItems: "start",
+                }}
+              >
+                <Field label={t("plan.fields.appendStep")}>
+                  <Input value={planAppendStep} onChange={setPlanAppendStep} />
+                </Field>
+                <div style={{ paddingTop: "24px" }}>
+                  {planAppendStep.trim() && (
+                    <ActionButton
+                      action={setPlanBoardAction}
+                      values={{ append_step: planAppendStep }}
+                      onResult={() => setPlanAppendStep("")}
+                    >
+                      {t("actions.appendPlanStep")}
+                    </ActionButton>
+                  )}
+                </div>
+              </div>
 
               {planState.steps.length > 0 && (
-                <Stack>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) minmax(120px, 160px) minmax(120px, 160px)",
+                    gap: "12px",
+                    alignItems: "start",
+                  }}
+                >
                   <Field label={t("plan.fields.step")}>
                     <Select
                       options={planStepOptions}
@@ -333,7 +391,7 @@ export default function Panel(props: PluginSurfaceProps<State>) {
                       onChange={setSelectedPlanStep}
                     />
                   </Field>
-                  <Stack direction="horizontal">
+                  <div style={{ paddingTop: "24px" }}>
                     {selectedPlanStep && (
                       <ActionButton
                         action={setPlanBoardAction}
@@ -342,6 +400,8 @@ export default function Panel(props: PluginSurfaceProps<State>) {
                         {t("actions.completePlanStep")}
                       </ActionButton>
                     )}
+                  </div>
+                  <div style={{ paddingTop: "24px" }}>
                     {selectedPlanStep && (
                       <ActionButton
                         action={setPlanBoardAction}
@@ -350,17 +410,8 @@ export default function Panel(props: PluginSurfaceProps<State>) {
                         {t("actions.reopenPlanStep")}
                       </ActionButton>
                     )}
-                  </Stack>
-                </Stack>
-              )}
-              {(planSummary.total_steps > 0 || planState.title) && (
-                <ActionButton
-                  action={setPlanBoardAction}
-                  values={{ clear: true }}
-                  confirm={t("plan.clearConfirm")}
-                >
-                  {t("actions.clearPlan")}
-                </ActionButton>
+                  </div>
+                </div>
               )}
             </Stack>
           )}

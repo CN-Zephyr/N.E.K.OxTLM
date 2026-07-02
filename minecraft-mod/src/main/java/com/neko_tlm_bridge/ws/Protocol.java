@@ -11,6 +11,7 @@ public final class Protocol {
     public static final String TYPE_GET_CONFIG = "get_config";
     public static final String TYPE_SET_MONITORED_MAID = "set_monitored_maid";
     public static final String TYPE_SET_PLAN = "set_plan";
+    public static final String TYPE_GET_PLAN = "get_plan";
     public static final String TYPE_PING = "ping";
 
     public static final String TYPE_MAID_STATUS = "maid_status";

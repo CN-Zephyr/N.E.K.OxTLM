@@ -145,7 +145,7 @@ class AwarenessManager:
             if not old_state:
                 return changes
 
-            # === 0. Player held item change (debounced) ===
+            # === 0. 玩家手持物品变化（带防抖）===
             new_held = new_state["player_held_item"]
             new_held_count = new_state["player_held_item_count"]
             if new_held == self._held_item_candidate:
@@ -159,7 +159,7 @@ class AwarenessManager:
                 self._held_item_candidate = new_held
                 self._held_item_candidate_count = new_held_count
 
-            # === 0.5 Nearby structures discovery ===
+            # === 0.5 附近结构发现 ===
             old_structures = {s["name"] for s in old_state.get("nearby_structures", [])}
             new_structures = new_state["nearby_structures"]
             discovered = [s for s in new_structures if s["name"] not in old_structures]
@@ -167,7 +167,7 @@ class AwarenessManager:
                 for s in discovered[:3]:
                     changes.append({"text": f"附近发现结构: {s['name']} (距离{s['distance']}格)", "urgent": False, "context_only": True})
 
-            # === 0.6 Player near/far state change ===
+            # === 0.6 玩家远近状态变化 ===
             new_dist = new_state.get("maid_player_distance")
             if new_dist is not None:
                 if self._player_nearby and new_dist > 50:
@@ -182,7 +182,7 @@ class AwarenessManager:
                         changes.append({"text": "玩家回来了！你很开心", "urgent": False})
                 self._last_maid_player_distance = new_dist
 
-            # === 1. Revenge after respawn ===
+            # === 1. 复活后复仇 ===
             if self._was_dead and new_state["maid_health"] > 0:
                 self._was_dead = False
                 if self._pending_revenge:
@@ -194,7 +194,7 @@ class AwarenessManager:
                     else:
                         changes.append({"text": "我复活了！下次不会再倒下了！", "urgent": False})
 
-            # === 2. Player health & status concern ===
+            # === 2. 玩家生命值与状态关注 ===
             new_player_health = new_state["player_health"]
             player_max_health = new_state["player_max_health"]
 
@@ -210,7 +210,7 @@ class AwarenessManager:
                 self._last_drown_warn_time = now
                 changes.append({"text": "玩家在溺水！提醒快上岸！", "urgent": True})
 
-            # === 2.5. Player hunger warning (with saturation) ===
+            # === 2.5. 玩家饥饿警告（含饱和度）===
             player_food = new_state.get("player_food_level", 20)
             player_sat = new_state.get("player_saturation", 0)
             if (player_food <= 6 or (player_food <= 12 and player_sat <= 0)) and now - self._last_hunger_warn_time > 300:
@@ -222,7 +222,7 @@ class AwarenessManager:
                     self._last_hunger_warn_time = now
                     changes.append({"text": "玩家饥饿值偏低，而且还在危险中，提醒注意补给！", "urgent": False})
 
-            # === 2.6. Player equipment durability warning ===
+            # === 2.6. 玩家装备耐久警告 ===
             equipment = new_state.get("player_equipment_durability", [])
             low_durability = [e for e in equipment if e.get("durability_ratio", 1) < 0.15]
             if low_durability and now - self._last_low_durability_warn_time > 300:
@@ -230,19 +230,19 @@ class AwarenessManager:
                 parts = [f"{e.get('item', '').split(':')[-1]}({int(e.get('durability_ratio', 0) * 100)}%)" for e in low_durability[:3]]
                 changes.append({"text": f"玩家装备快坏了！{', '.join(parts)}", "urgent": True})
 
-            # === 2.7. Player level up ===
+            # === 2.7. 玩家升级 ===
             new_level = new_state.get("player_experience_level", 0)
             if self._last_player_level is not None and new_level > self._last_player_level:
                 changes.append({"text": f"玩家升级到{new_level}级了！", "urgent": False})
             self._last_player_level = new_level
 
-            # === 3. Maid inventory context ===
+            # === 3. 女仆物品栏上下文 ===
             new_inventory = new_state["maid_inventory"]
             if new_inventory != old_state.get("maid_inventory", []):
                 item_count = sum(int(item.get("count", 1) or 1) for item in new_inventory)
                 changes.append({"text": f"女仆背包状态已更新，共{item_count}件物品", "urgent": False, "context_only": True})
 
-            # Hostile entities
+            # 敌对实体
             old_hostiles = {h["name"] for h in old_state.get("nearby_hostiles", [])}
             new_hostiles = new_state["nearby_hostiles"]
             appeared = [h for h in new_hostiles if h["name"] not in old_hostiles]

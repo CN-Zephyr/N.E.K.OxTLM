@@ -73,6 +73,8 @@
   "actions.completePlanStep": "标记完成",
   "actions.reopenPlanStep": "标记未完成",
   "actions.clearPlan": "清空目标板",
+  "entries.setPlanBoard.name": "更新目标板",
+  "entries.applySpeechPreset.name": "应用陪玩预设",
   "yes": "是",
   "no": "否"
 }
