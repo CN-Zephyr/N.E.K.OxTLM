@@ -410,7 +410,7 @@ neko_minecraft/
 ## 构建
 
 ```bash
-./gradlew build
+./gradlew.bat build
 ```
 
 构建产物位于 `build/libs/` 目录下。
