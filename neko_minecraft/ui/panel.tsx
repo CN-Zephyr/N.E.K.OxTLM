@@ -104,7 +104,7 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const [planAppendStep, setPlanAppendStep] = useState<string>("")
   const [selectedPlanStep, setSelectedPlanStep] = useState<string>("")
   const settingText = (key: string) => String(companionSettings[key] ?? "")
-  const [selectedCompanionMode, setSelectedCompanionMode] = useLocalState<string>("selectedCompanionMode", companionMode)
+  const [selectedCompanionMode, setSelectedCompanionMode] = useState<string>(companionMode)
   const [customQuietStableSeconds, setCustomQuietStableSeconds] = useState<string>(settingText("playmate_quiet_stable_seconds"))
   const [customQuietCooldown, setCustomQuietCooldown] = useState<string>(settingText("playmate_quiet_cooldown"))
   const [customSuggestionCooldown, setCustomSuggestionCooldown] = useState<string>(settingText("playmate_suggestion_cooldown"))
@@ -115,6 +115,9 @@ export default function Panel(props: PluginSurfaceProps<State>) {
 
   useEffect(() => {
     setSelectedCompanionMode(companionMode)
+  }, [companionMode])
+
+  useEffect(() => {
     setCustomQuietStableSeconds(settingText("playmate_quiet_stable_seconds"))
     setCustomQuietCooldown(settingText("playmate_quiet_cooldown"))
     setCustomSuggestionCooldown(settingText("playmate_suggestion_cooldown"))
