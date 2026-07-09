@@ -41,6 +41,7 @@ type State = {
   plan_state: PlanState
   plan_summary: PlanSummary
   last_diagnostic?: DiagnosticResult | null
+  last_refresh_status?: RefreshStatus | null
 }
 
 type PlanStep = {
@@ -75,6 +76,11 @@ type DiagnosticResult = {
   checks: DiagnosticCheck[]
 }
 
+type RefreshStatus = {
+  status: string
+  message: string
+}
+
 export default function Panel(props: PluginSurfaceProps<State>) {
   const { t, state, actions, useLocalState } = props
 
@@ -85,11 +91,12 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const assignedId = state?.assigned_maid_id ?? ""
   const assignedName = state?.assigned_maid_name ?? ""
   const commandExecutionEnabled = state?.command_execution_enabled ?? false
-  const companionMode = state?.companion_mode ?? "custom"
+  const companionMode = state?.companion_mode ?? "standard"
   const companionSettings = state?.companion_settings ?? {}
   const planState = state?.plan_state ?? { title: "", steps: [], updated_at: 0 }
   const planSummary = state?.plan_summary ?? { title: "", total_steps: 0, completed_steps: 0, pending_steps: 0, plan: "" }
   const diagnostic = state?.last_diagnostic ?? null
+  const refreshStatus = state?.last_refresh_status ?? null
 
   const [selectedMaidId, setSelectedMaidId] = useLocalState<string>("selectedMaidId", "")
   const [connectionPort, setConnectionPort] = useState<string>(wsPort)
@@ -97,7 +104,7 @@ export default function Panel(props: PluginSurfaceProps<State>) {
   const [planAppendStep, setPlanAppendStep] = useState<string>("")
   const [selectedPlanStep, setSelectedPlanStep] = useState<string>("")
   const settingText = (key: string) => String(companionSettings[key] ?? "")
-  const [selectedCompanionMode, setSelectedCompanionMode] = useState<string>(companionMode)
+  const [selectedCompanionMode, setSelectedCompanionMode] = useLocalState<string>("selectedCompanionMode", companionMode)
   const [customQuietStableSeconds, setCustomQuietStableSeconds] = useState<string>(settingText("playmate_quiet_stable_seconds"))
   const [customQuietCooldown, setCustomQuietCooldown] = useState<string>(settingText("playmate_quiet_cooldown"))
   const [customSuggestionCooldown, setCustomSuggestionCooldown] = useState<string>(settingText("playmate_suggestion_cooldown"))
@@ -219,6 +226,11 @@ export default function Panel(props: PluginSurfaceProps<State>) {
               <ActionButton action={diagnoseAction}>{t("actions.diagnose")}</ActionButton>
             )}
           </Stack>
+          {refreshStatus && (
+            <Alert tone={refreshStatus.status === "success" ? "success" : refreshStatus.status === "error" ? "error" : "warning"}>
+              {refreshStatus.message}
+            </Alert>
+          )}
         </Stack>
       </Card>
 

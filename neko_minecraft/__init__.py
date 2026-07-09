@@ -134,7 +134,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._chat_bubble_enabled = True
         self._chat_box_enabled = True
         self._instructions_injected = False
-        self._companion_mode = "custom"
+        self._companion_mode = "standard"
         self._awareness_interval = 60
         self._playmate_memory_items = 24
         self._playmate_memory_summary_length = 120
@@ -155,6 +155,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._current_plan_text = ""
         self._plan_state = _plan.empty_plan()
         self._last_diagnostic = None
+        self._last_refresh_status = None
         self._playmate_debug = PlaymateDebugLogger(self)
         self._minecraft_push = MinecraftPushRouter(self)
         self._playmate = PlaymateContextManager(self)
@@ -615,20 +616,35 @@ class NekoMinecraftPlugin(NekoPluginBase):
             "plan_state": self._plan_state,
             "plan_summary": _plan.plan_summary(self._plan_state),
             "last_diagnostic": self._last_diagnostic,
+            "last_refresh_status": self._last_refresh_status,
         }
 
     @ui.action(id="refresh_maid_status", label=tr("actions.refresh", default="Refresh Status"), tone="primary", refresh_context=True)
     @plugin_entry(id="refresh_maid_status", name=tr("entries.refresh.name", default="Refresh Maid Status"), description="Fetch current maid status and true current work mode from Minecraft. When the user asks what mode the maid is in, answer from current_mode/current_mode_answer, not from previous intent.", input_schema={"type": "object", "properties": {}}, llm_result_fields=["current_mode", "current_mode_answer", "selected_maid", "available_modes", "maids"])
     async def refresh_maid_status(self, **_):
         if not self.connected:
-            return Err("Not connected to Minecraft")
-        result = await self._send_request({"type": "get_maid_status"})
+            self._last_refresh_status = {
+                "status": "warning",
+                "message": "尚未连接到 Minecraft。请确认游戏已进入存档且 N.E.K.O 桥接已启用，然后重试刷新。",
+            }
+            return Ok({"success": False, **self._last_refresh_status})
+        result = await self._send_request({"type": "get_maid_status"}, timeout=4)
         if result.get("type") == "error":
-            return Err(str(result.get("data", {})))
+            raw_message = str(result.get("data", {}).get("message", ""))
+            if raw_message == "Request timed out":
+                message = "刷新状态超时：Minecraft 端暂时没有响应。请确认游戏没有卡顿、已进入存档，稍后点击“刷新状态”重试。"
+            else:
+                message = raw_message or "刷新状态失败，请稍后重试。"
+            self._last_refresh_status = {"status": "warning", "message": message}
+            return Ok({"success": False, **self._last_refresh_status})
         maids = result.get("data", {}).get("maids", [])
         for maid in maids:
             self._maid_status_cache[maid.get("id", "")] = maid
-        return Ok(_tools.maid_status_payload(self, maids, compact=True))
+        self._last_refresh_status = {
+            "status": "success",
+            "message": f"刷新完成，找到 {len(maids)} 个女仆。" if maids else "刷新完成，但当前世界未检测到女仆。",
+        }
+        return Ok({**_tools.maid_status_payload(self, maids, compact=True), **self._last_refresh_status})
 
     @ui.action(id="assign_maid", label=tr("actions.assignMaid", default="Assign Maid"), tone="primary", refresh_context=True)
     @plugin_entry(id="assign_maid", name=tr("entries.assign.name", default="Assign Maid"), description="Assign a specific maid by ID for the AI to control. ONLY use this tool when you need to CHANGE the current maid or no maid is assigned. If a maid is already assigned in the config, you do NOT need to call this tool; just proceed with the task directly.", input_schema={"type": "object", "properties": {"maid_id": {"type": "string", "description": "The maid entity ID (UUID) to assign"}, "maid_name": {"type": "string", "description": "The maid name for display"}}, "required": []}, llm_result_fields=["assigned_maid_id", "assigned_maid_name"])

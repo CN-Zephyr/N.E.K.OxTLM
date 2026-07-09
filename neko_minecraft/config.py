@@ -89,18 +89,18 @@ def _load_playmate_config(plugin, config):
 
 
 def _normalize_companion_mode(mode, plugin=None):
-    """规范化陪玩模式名称，未知值回退为 custom"""
-    mode = str(mode or "custom").strip().lower()
+    """规范化陪玩模式名称，未知值回退为 standard"""
+    mode = str(mode or "standard").strip().lower()
     if mode in ("quiet", "standard", "active", "custom"):
         return mode
     if plugin:
-        plugin.logger.warning(f"未知的 companion_mode '{mode}'，回退为 custom")
-    return "custom"
+        plugin.logger.warning(f"未知的 companion_mode '{mode}'，回退为 standard")
+    return "standard"
 
 
 def _apply_companion_mode(plugin):
     """根据当前陪玩模式应用预设参数（custom 模式不覆盖自定义值）"""
-    mode = _normalize_companion_mode(getattr(plugin, "_companion_mode", "custom"), plugin)
+    mode = _normalize_companion_mode(getattr(plugin, "_companion_mode", "standard"), plugin)
     plugin._companion_mode = mode
     preset = COMPANION_MODE_PRESETS.get(mode)
     if not preset:
@@ -145,7 +145,7 @@ def _runtime_config_payload(plugin):
         "assigned_maid_id": plugin._assigned_maid_id,
         "assigned_maid_name": plugin._assigned_maid_name,
         "awareness_interval": getattr(plugin, "_awareness_interval", 5),
-        "companion_mode": getattr(plugin, "_companion_mode", "custom"),
+        "companion_mode": getattr(plugin, "_companion_mode", "standard"),
     }
     for key in COMPANION_CUSTOM_FIELDS:
         payload[key] = getattr(plugin, f"_{key}", COMPANION_MODE_PRESETS["standard"].get(key, 1))

@@ -4,8 +4,6 @@
 全局工具调用策略不在本插件的诊断范围内。
 """
 
-from .bridge import _is_java_running as _bridge_is_java_running
-
 
 def _check(status, title, detail, suggestion=""):
     item = {"status": status, "title": title, "detail": detail}
@@ -16,17 +14,6 @@ def _check(status, title, detail, suggestion=""):
 
 async def diagnose_bridge(plugin):
     checks = []
-
-    java_running = _is_java_running()
-    if java_running:
-        checks.append(_check("ok", "Java 进程", "检测到 Java/Minecraft 进程。"))
-    else:
-        checks.append(_check(
-            "error",
-            "Java 进程",
-            "未检测到 javaw.exe/java.exe，Minecraft 可能未启动。",
-            "先启动 Minecraft 并进入存档，再启动或刷新 N.E.K.O 插件。",
-        ))
 
     bridge_started = bool(plugin._bridge)
     if not bridge_started:
@@ -43,10 +30,10 @@ async def diagnose_bridge(plugin):
         checks.append(_check("ok", "WebSocket", f"已连接到 {plugin._ws_url}。"))
     else:
         checks.append(_check(
-            "error" if java_running else "warning",
+            "warning",
             "WebSocket",
             f"尚未连接到 {plugin._ws_url}。",
-            "确认 Minecraft 已进入世界且未暂停；检查 mod 是否安装、端口是否一致、是否被占用。",
+            "确认 Minecraft 已启动并进入世界且未暂停；检查 mod 是否安装、端口是否一致、是否被占用。",
         ))
         _append_bridge_error_check(plugin, checks)
 
@@ -218,7 +205,3 @@ def _summary(status):
         "warning": "桥接可用但存在需要注意的配置或状态。",
         "error": "桥接存在阻断问题，需要先处理错误项。",
     }.get(status, "桥接诊断完成。")
-
-
-def _is_java_running():
-    return _bridge_is_java_running()
