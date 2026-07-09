@@ -1,5 +1,42 @@
 # 更新日志
 
+## v1.0.5 (2026-07-10)
+
+### 新功能
+
+- **玩家登录事件处理**：新增玩家登录事件的收发与处理逻辑，解决玩家进游戏时检测不到女仆的问题。
+  - Mod 端通过 `Protocol.java` 和 `GameEventHandler.java` 广播 `player_login` 事件。
+  - 插件端在桥接连接/重连、玩家登录时刷新女仆状态缓存，初始扫描失败时延迟 2 秒重试。
+  - 新增 `_refresh_maid_status_cache` 和 `_delayed_refresh_maid_status` 方法统一女仆状态刷新入口。
+  - `player_login` 事件不推送给 LLM，避免无效上下文。
+- **MaidHelper 工具类**：将女仆查找逻辑抽离到独立工具类，统一女仆实体查找方式。
+  - 新增 `getAllMaids` 方法批量获取全服女仆，替换原有的范围查询逻辑，兼容 Sable 模组。
+  - 重构 `MaidStatusHandler` 和 `GameEventHandler` 中的女仆查找代码。
+- **LLM 工具注册重试**：新增重发 LLM 工具注册的方法，插件启动时立即执行一次，并添加 5 秒延迟兜底重试。
+- **刷新状态 UI 展示**：新增刷新状态 UI 展示和后端状态记录，优化用户反馈。
+
+### 优化
+
+- **桥接线程简化**：移除 MC 退出检测相关逻辑，简化桥接线程运行逻辑。
+- **诊断模块精简**：移除 `diagnostics.py` 中冗余的 Java 进程检测逻辑，简化桥接诊断。
+- **陪玩模式默认值**：将陪玩模式默认值从 `custom` 调整为 `standard`，更新多处配置默认值。
+- **女仆状态刷新调度**：优化 Python 侧的女仆状态刷新调度逻辑，新增任务取消处理。
+- **UI 面板状态同步**：将自定义的 `useLocalState` 替换为原生 `useState`，新增依赖项以正确同步 `companionMode` 状态。
+- **代码健壮性**：补充参数非空校验，提升代码健壮性。
+
+### 修复
+
+- **LLM 工具注册失败**：修复插件初始化阶段宿主 session 未就绪导致 LLM 工具注册失败的问题。
+- **UI 状态同步**：修复 UI 面板 `companionMode` 状态同步不正确的问题。
+
+### 文档
+
+- 更新 README 文档：补充 `get_plan` API 条目、awareness 返回数据说明、Push 聚合与 `coalesce_key` 节流说明。
+- 移除冗余的 `config.json` 提及项，修正链接描述。
+- 更新构建命令适配 Windows 环境（`./gradlew` → `./gradlew.bat`）。
+
+***
+
 ## v1.0.4 (2026-07-03)
 
 ### 新功能
