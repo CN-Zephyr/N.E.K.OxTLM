@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - neko-tlm-bridge",
+        "order": 0
+      },
+      "projectName": "neko-tlm-bridge",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@H:\\AI\\mc-touhu-neko\\minecraft-mod\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@H:\\AI\\mc-touhu-neko\\minecraft-mod\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dneko_tlm_bridge%%H:\\AI\\mc-touhu-neko\\minecraft-mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - neko-tlm-bridge",
+        "order": 1
+      },
+      "projectName": "neko-tlm-bridge",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@H:\\AI\\mc-touhu-neko\\minecraft-mod\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@H:\\AI\\mc-touhu-neko\\minecraft-mod\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dneko_tlm_bridge%%H:\\AI\\mc-touhu-neko\\minecraft-mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

@@ -283,7 +283,6 @@ class WSBridge:
         self._ws = None
         self.connected = False
         self._running = False
-        self.mc_exited = False
         self.last_error_type = ""
         self.last_error_message = ""
         self.last_error_time = 0
@@ -293,7 +292,6 @@ class WSBridge:
 
     def start(self):
         self._running = True
-        self.mc_exited = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -377,10 +375,6 @@ class WSBridge:
                 self._ws = None
 
             if self._running:
-                if not _is_java_running(self._logger):
-                    self._logger.info("[WSBridge] Java process not found, MC has exited")
-                    self.mc_exited = True
-                    break
                 handshake_failed = self.last_error_type == "InvalidMessage"
                 reconnect_delay = self._handshake_retry_interval if handshake_failed else delay
                 reconnect_delay = min(max(1, reconnect_delay), self._max_reconnect_interval)

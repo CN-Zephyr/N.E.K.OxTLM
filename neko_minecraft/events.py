@@ -201,6 +201,10 @@ def format_event(event_data, assigned_maid_id):
     parts_text = ""
     side_effects = {}
 
+    if event_type == "player_login":
+        # 由 __init__ 单独处理并刷新女仆状态，不向 LLM 推送
+        return None, None, None
+
     if event_type == "maid_hurt":
         priority = 9
         damage = event_data.get("damage", "")

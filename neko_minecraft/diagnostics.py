@@ -36,13 +36,6 @@ async def diagnose_bridge(plugin):
             "Python WebSocket 客户端尚未启动。",
             "确认插件已启用；如果刚启用，请刷新插件面板。",
         ))
-    elif plugin._bridge.mc_exited:
-        checks.append(_check(
-            "error",
-            "桥接线程",
-            "桥接层判断 Minecraft 已退出。",
-            "重新进入存档后重启或刷新插件。",
-        ))
     else:
         checks.append(_check("ok", "桥接线程", "Python WebSocket 客户端已启动。"))
 

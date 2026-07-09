@@ -26,6 +26,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.ItemFishedEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
@@ -249,6 +250,29 @@ public class GameEventHandler {
         chatData.addProperty("y", player.getY());
         chatData.addProperty("z", player.getZ());
         webSocketServer.broadcastChatMessage(chatData);
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (webSocketServer == null || !webSocketServer.hasClients()) return;
+        Player player = event.getEntity();
+        if (player.level().isClientSide()) return;
+        JsonObject eventData = new JsonObject();
+        eventData.addProperty("event_type", Protocol.EVENT_PLAYER_LOGIN);
+        eventData.addProperty("player_name", player.getName().getString());
+        eventData.addProperty("player_uuid", player.getStringUUID());
+        eventData.addProperty("dimension", player.level().dimension().location().toString());
+        eventData.addProperty("x", player.getX());
+        eventData.addProperty("y", player.getY());
+        eventData.addProperty("z", player.getZ());
+        if (!monitoredMaidId.isEmpty()) {
+            EntityMaid maid = findMaidById(monitoredMaidId, player.getServer());
+            if (maid != null && maid.getOwner() != null && maid.getOwner().getUUID().equals(player.getUUID())) {
+                eventData.addProperty("maid_id", maid.getStringUUID());
+                eventData.addProperty("maid_name", maid.getName().getString());
+            }
+        }
+        webSocketServer.broadcastEvent(eventData);
     }
 
     @SubscribeEvent

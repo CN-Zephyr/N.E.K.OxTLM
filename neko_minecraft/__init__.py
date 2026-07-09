@@ -6,7 +6,6 @@ from plugin.sdk.plugin import (
     Ok, Err, SdkError,
 )
 import asyncio
-import os
 import sys
 import uuid
 from urllib.parse import urlsplit, urlunsplit
@@ -256,13 +255,6 @@ class NekoMinecraftPlugin(NekoPluginBase):
         while True:
             try:
                 if self._bridge:
-                    if self._bridge.mc_exited:
-                        self.logger.info("[Poll] MC has exited, cleaning up plugin resources")
-                        self._awareness.stop()
-                        self._bridge.stop()
-                        await self._minecraft_push.flush()
-                        self._instructions_injected = False
-                        os._exit(0)
                     is_connected = self._bridge.connected
                     if is_connected and not was_connected:
                         await self._on_bridge_reconnect()
@@ -317,6 +309,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 }, timeout=5)
             except Exception:
                 pass
+        # 桥接连通时主动拉取一次女仆状态，避免首次连接/重连时女仆尚未加载导致面板为空
+        try:
+            await self._refresh_maid_status_cache()
+        except Exception:
+            pass
         # 目标板双向同步：先查询 MC 端，有则采用 MC 端的；无则推送插件侧的
         try:
             plan_result = await self._send_request({"type": "get_plan"}, timeout=5)
@@ -370,6 +367,10 @@ class NekoMinecraftPlugin(NekoPluginBase):
             await self._apply_plan_text(plan_text, save=True)
             return
         if msg_type == "event":
+            event_data = data.get("data", {})
+            if event_data.get("event_type") == "player_login":
+                await self._handle_player_login_event(event_data)
+                return
             await self._handle_event(data)
             return
         if msg_type == "chat_message":
@@ -389,6 +390,15 @@ class NekoMinecraftPlugin(NekoPluginBase):
         if request_id and request_id in self._request_futures:
             self._request_futures[request_id].set_result(data)
             del self._request_futures[request_id]
+
+    async def _handle_player_login_event(self, event_data):
+        """玩家登录事件：刷新女仆状态缓存，让刚进世界的用户能被正确检测到。"""
+        player_name = event_data.get("player_name", "unknown")
+        self.logger.info(f"[Event] Player logged in: {player_name}")
+        found = await self._refresh_maid_status_cache()
+        if not found:
+            # 女仆实体可能还在加载，延迟 2 秒再扫一次
+            asyncio.create_task(self._delayed_refresh_maid_status(2))
 
     async def _handle_event(self, data):
         event_data = data.get("data", {})
@@ -520,6 +530,34 @@ class NekoMinecraftPlugin(NekoPluginBase):
                 return first_id.get("id", "")
         return ""
 
+    async def _refresh_maid_status_cache(self):
+        """向 mod 查询女仆状态并更新本地缓存，供面板和工具使用。"""
+        if not self.connected:
+            return False
+        try:
+            result = await self._send_request({"type": "get_maid_status"}, timeout=5)
+            if result.get("type") == "error":
+                return False
+            maids = result.get("data", {}).get("maids", [])
+            for maid in maids:
+                self._maid_status_cache[maid.get("id", "")] = maid
+            if maids:
+                self.logger.info(f"[MaidStatus] Refreshed cache, {len(maids)} maid(s) found")
+            return bool(maids)
+        except Exception as e:
+            self.logger.warning(f"[MaidStatus] Failed to refresh cache: {e}")
+            return False
+
+    async def _delayed_refresh_maid_status(self, delay):
+        """延迟刷新女仆状态，用于玩家登录后女仆实体尚未完全加载的场景。"""
+        try:
+            await asyncio.sleep(delay)
+            await self._refresh_maid_status_cache()
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self.logger.warning(f"[MaidStatus] Delayed refresh failed: {e}")
+
     def _should_suppress_biome_change_event(self, event_data):
         explicit = _event_underground_hint(event_data or {})
         if explicit is not None:
@@ -535,13 +573,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @ui.context(id="dashboard")
     async def dashboard_context(self, **_):
         if self.connected and not self._maid_status_cache:
-            try:
-                result = await self._send_request({"type": "get_maid_status"}, timeout=5)
-                if result.get("type") != "error":
-                    for maid in result.get("data", {}).get("maids", []):
-                        self._maid_status_cache[maid.get("id", "")] = maid
-            except Exception as e:
-                self.logger.warning(f"dashboard_context: failed to fetch maid_status: {e}")
+            await self._refresh_maid_status_cache()
         maids = []
         for maid in self._maid_status_cache.values():
             maids.append({

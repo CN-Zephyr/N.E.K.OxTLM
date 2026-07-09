@@ -45,6 +45,7 @@ public final class Protocol {
     public static final String EVENT_CONTAINER_INTERACTION = "container_interaction";
     public static final String EVENT_FISHING_START = "fishing_start";
     public static final String EVENT_ITEM_FISHED = "item_fished";
+    public static final String EVENT_PLAYER_LOGIN = "player_login";
 
     // Chess game events
     public static final String EVENT_CHESS_GAME_START = "chess_game_start";
