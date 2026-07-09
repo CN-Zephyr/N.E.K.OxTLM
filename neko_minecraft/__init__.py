@@ -121,6 +121,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self.logger = ctx.logger
         self._bridge = None
         self._poll_task = None
+        self._maid_status_refresh_task = None
         self._request_futures = {}
         self._maid_status_cache = {}
         self._ws_url = "ws://127.0.0.1:48920"
@@ -242,6 +243,12 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self._poll_task.cancel()
             try:
                 await self._poll_task
+            except asyncio.CancelledError:
+                pass
+        if self._maid_status_refresh_task:
+            self._maid_status_refresh_task.cancel()
+            try:
+                await self._maid_status_refresh_task
             except asyncio.CancelledError:
                 pass
         self._awareness.stop()
@@ -491,6 +498,11 @@ class NekoMinecraftPlugin(NekoPluginBase):
         except asyncio.TimeoutError:
             self._request_futures.pop(request_id, None)
             return {"type": "error", "data": {"message": "Request timed out"}}
+        except asyncio.CancelledError:
+            self._request_futures.pop(request_id, None)
+            if not future.done():
+                future.cancel()
+            raise
 
     @property
     def connected(self):
@@ -548,6 +560,13 @@ class NekoMinecraftPlugin(NekoPluginBase):
             self.logger.warning(f"[MaidStatus] Failed to refresh cache: {e}")
             return False
 
+    def _schedule_maid_status_refresh(self):
+        if not self.connected:
+            return
+        if self._maid_status_refresh_task and not self._maid_status_refresh_task.done():
+            return
+        self._maid_status_refresh_task = asyncio.create_task(self._refresh_maid_status_cache())
+
     async def _delayed_refresh_maid_status(self, delay):
         """延迟刷新女仆状态，用于玩家登录后女仆实体尚未完全加载的场景。"""
         try:
@@ -573,7 +592,7 @@ class NekoMinecraftPlugin(NekoPluginBase):
     @ui.context(id="dashboard")
     async def dashboard_context(self, **_):
         if self.connected and not self._maid_status_cache:
-            await self._refresh_maid_status_cache()
+            self._schedule_maid_status_refresh()
         maids = []
         for maid in self._maid_status_cache.values():
             maids.append({

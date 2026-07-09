@@ -10,6 +10,7 @@ import com.github.tartaricacid.touhoulittlemaid.tileentity.TileEntityJoy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.neko_tlm_bridge.config.ModConfig;
+import com.neko_tlm_bridge.ws.handler.MaidHelper;
 import com.neko_tlm_bridge.ws.NekoWebSocketServer;
 import com.neko_tlm_bridge.ws.Protocol;
 import net.minecraft.core.BlockPos;
@@ -660,18 +661,7 @@ public class GameEventHandler {
     }
 
     private static EntityMaid findMaidById(String maidId, net.minecraft.server.MinecraftServer server) {
-        try {
-            java.util.UUID uuid = java.util.UUID.fromString(maidId);
-            if (server != null) {
-                for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
-                    net.minecraft.world.entity.Entity entity = level.getEntity(uuid);
-                    if (entity instanceof EntityMaid maid) {
-                        return maid;
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-        return null;
+        return MaidHelper.findMaidById(server, maidId);
     }
 
     private static boolean shouldTrackPlayerBlockActivity(Player player) {

@@ -8,8 +8,6 @@ import com.google.gson.JsonObject;
 import com.neko_tlm_bridge.ws.Protocol;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.item.ItemStack;
 import org.java_websocket.WebSocket;
 
@@ -31,10 +29,8 @@ public class MaidStatusHandler implements MessageHandlerInterface {
         response.addProperty("type", Protocol.TYPE_MAID_STATUS);
         if (requestId != null) response.addProperty("request_id", requestId);
         JsonArray maidsArray = new JsonArray();
-        for (ServerLevel level : server.getAllLevels()) {
-            for (EntityMaid maid : level.getEntitiesOfClass(EntityMaid.class, new AABB(level.getWorldBorder().getMinX(), level.getMinBuildHeight(), level.getWorldBorder().getMinZ(), level.getWorldBorder().getMaxX(), level.getMaxBuildHeight(), level.getWorldBorder().getMaxZ()))) {
-                maidsArray.add(serializeMaid(maid));
-            }
+        for (EntityMaid maid : MaidHelper.getAllMaids(server)) {
+            maidsArray.add(serializeMaid(maid));
         }
         JsonObject data = new JsonObject();
         data.add("maids", maidsArray);
