@@ -228,8 +228,33 @@ class NekoMinecraftPlugin(NekoPluginBase):
         self._bridge.start()
         self._poll_task = asyncio.create_task(self._poll_messages())
         self._instructions_injected = False
+        self._re_register_llm_tools()
+        asyncio.create_task(self._delayed_re_register_llm_tools(5))
         self.logger.info(f"[Startup] Bridge started, maid_id={self._assigned_maid_id}")
         return Ok({"status": "ready"})
+
+    def _re_register_llm_tools(self):
+        """重新发送 LLM_TOOL_REGISTER IPC，补救 __init__ 阶段失败的注册。
+
+        SDK 在 __init__ 中自动注册 @llm_tool 方法，但宿主向 main_server
+        /api/tools/register 发 HTTP POST 时可能因 role session 尚未就绪而
+        失败（返回 ok=False, "no role accepted the registration"）。
+        SDK 没有重试机制，这里在 startup 生命周期中重发一次 IPC 通知，
+        此时 main_server 的 role session 通常已就绪。
+        """
+        if not self._llm_tools:
+            return
+        for meta in self._llm_tools.values():
+            self._notify_llm_tool_registered(meta)
+        self.logger.info(f"[Startup] Re-emitted {len(self._llm_tools)} LLM tool registrations")
+
+    async def _delayed_re_register_llm_tools(self, delay=5):
+        """延迟后再次重发注册，兜底 startup 阶段 main_server 仍未就绪的边界情况。"""
+        try:
+            await asyncio.sleep(delay)
+            self._re_register_llm_tools()
+        except asyncio.CancelledError:
+            pass
 
     async def _on_command_loop_start(self):
         self.logger.info("[CommandLoop] Starting message poll on command loop")
