@@ -104,6 +104,7 @@ public class NekoWebSocketServer extends WebSocketServer {
         msg.addProperty("type", Protocol.TYPE_CONFIG_UPDATE);
         JsonObject data = new JsonObject();
         data.addProperty("neko_mode_enabled", ModConfig.NEKO_MODE_ENABLED.get());
+        data.addProperty("maid_agent_enabled", ModConfig.MAID_AGENT_ENABLED.get());
         data.addProperty("event_push_enabled", ModConfig.EVENT_PUSH_ENABLED.get());
         data.addProperty("command_execution_enabled", ModConfig.COMMAND_EXECUTION_ENABLED.get());
         data.addProperty("chat_bubble_enabled", ModConfig.CHAT_BUBBLE_ENABLED.get());
@@ -123,6 +124,18 @@ public class NekoWebSocketServer extends WebSocketServer {
         JsonObject data = new JsonObject();
         data.addProperty("plan", planText != null ? planText : "");
         msg.add("data", data);
+        String json = GSON.toJson(msg);
+        for (WebSocket client : clients) {
+            sendToClient(client, json);
+        }
+    }
+
+    /** Broadcasts a typed asynchronous maid-action lifecycle message. */
+    public void broadcastMaidActionMessage(String type, JsonObject actionData) {
+        if (clients.isEmpty()) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", type);
+        msg.add("data", actionData);
         String json = GSON.toJson(msg);
         for (WebSocket client : clients) {
             sendToClient(client, json);

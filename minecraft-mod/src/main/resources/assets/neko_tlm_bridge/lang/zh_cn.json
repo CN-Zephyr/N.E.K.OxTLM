@@ -4,6 +4,10 @@
   "neko_tlm_bridge.config.websocket.port.tooltip": "N.E.K.O 插件连接的 WebSocket 端口号",
   "neko_tlm_bridge.config.bridge.nekoModeEnabled": "N.E.K.O 模式",
   "neko_tlm_bridge.config.bridge.nekoModeEnabled.tooltip": "启用后，女仆的 AI 对话将由 N.E.K.O 驱动",
+  "neko_tlm_bridge.config.bridge.maidAgentEnabled": "女仆主动 Agent",
+  "neko_tlm_bridge.config.bridge.maidAgentEnabled.tooltip": "允许 N.E.K.O 向女仆派发导航、采集等主动动作",
+  "neko_tlm_bridge.config.client.pathRenderingEnabled": "显示女仆寻路路线",
+  "neko_tlm_bridge.config.client.pathRenderingEnabled.tooltip": "在世界中显示 Agent 动作使用的真实服务端寻路路线",
   "neko_tlm_bridge.config.bridge.eventPushEnabled": "事件推送",
   "neko_tlm_bridge.config.bridge.eventPushEnabled.tooltip": "启用后，游戏事件将通过 WebSocket 推送给 N.E.K.O",
   "neko_tlm_bridge.config.bridge.commandExecutionEnabled": "指令执行",
@@ -27,5 +31,9 @@
   "neko_tlm_bridge.command.reject": "[✗ 拒绝]",
   "neko_tlm_bridge.command.not_found": "未找到待确认的指令请求: %s",
   "neko_tlm_bridge.command.executed": "已执行指令: %s",
-  "neko_tlm_bridge.command.rejected": "已拒绝指令: %s"
+  "neko_tlm_bridge.command.rejected": "已拒绝指令: %s",
+  "key.categories.neko_tlm_bridge": "N.E.K.O 女仆 Agent",
+  "key.neko_tlm_bridge.emergency_stop": "急停所有女仆 Agent 动作",
+  "message.neko_tlm_bridge.emergency_stop.stopped": "[N.E.K.O] 已急停 %s 个女仆 Agent 动作",
+  "message.neko_tlm_bridge.emergency_stop.none": "[N.E.K.O] 没有正在执行的女仆 Agent 动作"
 }
