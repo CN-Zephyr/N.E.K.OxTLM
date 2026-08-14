@@ -28,6 +28,8 @@
 3. 启动 Minecraft 并进入存档，再启动 N.E.K.O、启用酒狐插件。
 4. 在插件面板刷新女仆列表，选择要控制的女仆。
 
+第一次安装或不确定应下载哪些文件时，请先阅读[《Mod 下载与安装教程》](MOD_DOWNLOAD_GUIDE.md)。
+
 如果修改了桥接模组端口，请在插件面板中保存新的 WebSocket 端口，或同步修改 `plugin.toml` 的 `minecraft_bridge.ws_url`。
 
 ## 开发与贡献

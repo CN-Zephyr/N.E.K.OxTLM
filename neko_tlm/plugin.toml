@@ -16,11 +16,11 @@ keywords = [
     "maid", "farm", "idle", "feed", "shear", "torch", "creeper", "zombie", "skeleton",
     "mine", "mining", "gather", "chop", "navigate", "pathfind", "come here", "follow me"
 ]
-version = "1.0.7"
+version = "1.0.7_1"
 entry = "plugin.plugins.neko_tlm:NekoMinecraftPlugin"
 
 [plugin.author]
-name = "N.E.K.O Community"
+name = "ggg233m"
 
 [plugin.sdk]
 recommended = ">=0.1.0,<0.2.0"
@@ -46,6 +46,12 @@ title = "Minecraft Bridge"
 entry = "ui/panel.tsx"
 context = "dashboard"
 permissions = ["state:read", "action:call", "config:read"]
+
+[[plugin.ui.guide]]
+id = "mod-download"
+title = "下载 Mod"
+entry = "MOD_DOWNLOAD_GUIDE.md"
+permissions = ["state:read"]
 
 [minecraft_bridge]
 ws_url = "ws://127.0.0.1:48920"
