@@ -1002,7 +1002,7 @@ MC_EXECUTE_COMMAND = {
     "description": (
         "请求执行Minecraft服务器指令。"
         "command=指令内容（如/time set day、/weather clear、/tp等）。"
-        "指令发送后，游戏内会显示确认提示，需要玩家点击确认后才会执行。"
+        "确认提示只显示在关联女仆所有者的客户端，且只允许该客户端玩家确认；命令使用该玩家的权限执行。"
         "如果玩家拒绝或超时（120秒），指令不会被执行。"
         "此功能需要在游戏内N.E.K.O桥接配置中开启「指令执行」选项。"
     ),
@@ -1015,6 +1015,7 @@ MC_EXECUTE_COMMAND = {
             },
         },
         "required": ["command"],
+        "additionalProperties": False,
     },
     "timeout": 120,
 }

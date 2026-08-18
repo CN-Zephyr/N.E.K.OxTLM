@@ -5,7 +5,9 @@ import com.neko_tlm_bridge.config.ModConfig;
 import com.neko_tlm_bridge.ws.NekoCommand;
 import com.neko_tlm_bridge.ws.PendingCommandManager;
 import com.neko_tlm_bridge.ws.Protocol;
+import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import org.java_websocket.WebSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,17 +33,36 @@ public class CommandExecutionHandler implements MessageHandlerInterface {
             return createErrorResponse(requestId, "Command execution is disabled in config");
         }
         JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
-        String command = data.has("command") ? data.get("command").getAsString() : "";
+        String command = data.has("command") ? data.get("command").getAsString().trim() : "";
+        String maidId = data.has("maid_id") ? data.get("maid_id").getAsString().trim() : "";
 
-        if (command.isEmpty()) {
+        if (command.isBlank()) {
             return createErrorResponse(requestId, "Command is empty");
         }
+        if (maidId.isBlank()) {
+            return createErrorResponse(requestId, "Maid id is required to resolve the client player");
+        }
 
-        String pendingId = pendingCommandManager.addPendingCommand(requestId, command, conn);
-        NekoCommand.broadcastCommandRequest(server, pendingId, command);
+        ServerPlayer targetPlayer = resolveTargetPlayer(maidId);
+        if (targetPlayer == null) {
+            return createErrorResponse(requestId, "The assigned maid owner is not online");
+        }
+
+        String pendingId = pendingCommandManager.addPendingCommand(
+                requestId, command, conn, targetPlayer.getUUID());
+        NekoCommand.sendCommandRequest(targetPlayer, pendingId, command);
         LOGGER.info("Command execution request queued: {} (pending_id={}, request_id={})", command, pendingId, requestId);
 
         // No immediate response — response is sent when command is approved/rejected/expired
         return null;
+    }
+
+    private ServerPlayer resolveTargetPlayer(String maidId) {
+        EntityMaid maid = MaidHelper.findMaidById(server, maidId);
+        if (maid != null && maid.getOwner() instanceof ServerPlayer player) {
+            return player;
+        }
+        MaidHelper.UnloadedMaid unloaded = MaidHelper.findUnloadedMaid(server, maidId);
+        return unloaded == null ? null : unloaded.owner();
     }
 }

@@ -15,6 +15,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.ChatFormatting;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +55,26 @@ public class NekoCommand {
             return 0;
         }
 
+        PendingCommandManager manager = wsServer.getPendingCommandManager();
+        PendingCommandManager.PendingCommand pending = manager.get(pendingId);
+        if (pending == null) {
+            source.sendFailure(Component.translatable("neko_tlm_bridge.command.not_found", pendingId));
+            return 0;
+        }
+
+        if (!(source.getEntity() instanceof ServerPlayer player)
+                || pending.targetPlayerUuid == null
+                || !pending.targetPlayerUuid.equals(player.getUUID())) {
+            source.sendFailure(Component.literal("此指令确认仅限发起请求的客户端玩家"));
+            return 0;
+        }
+
+        if (!ModConfig.COMMAND_EXECUTION_ENABLED.get()) {
+            manager.cancel(pendingId, "Command execution was disabled in Minecraft mod config");
+            source.sendFailure(Component.literal("指令执行已被关闭，待确认指令已取消"));
+            return 0;
+        }
+
         int minOpLevel = ModConfig.COMMAND_CONFIRMATION_MIN_OP_LEVEL.get();
         if (!source.hasPermission(minOpLevel)) {
             // 权限不足时拒绝，避免低权限玩家执行高危指令
@@ -61,9 +82,7 @@ public class NekoCommand {
             return 0;
         }
 
-        PendingCommandManager manager = wsServer.getPendingCommandManager();
-        PendingCommandManager.PendingCommand pending = manager.getAndRemove(pendingId);
-
+        pending = manager.getAndRemove(pendingId);
         if (pending == null) {
             source.sendFailure(Component.translatable("neko_tlm_bridge.command.not_found", pendingId));
             return 0;
@@ -77,6 +96,8 @@ public class NekoCommand {
         Commands commands = server.getCommands();
         ParseResults<CommandSourceStack> parse = commands.getDispatcher().parse(trimmedCommand, source);
         int result = 0;
+        boolean success = false;
+        String errorMessage = null;
         if (parse.getExceptions().size() > 0 || parse.getContext().getRange().isEmpty()) {
             // 解析错误：发送错误消息给玩家
             CommandSyntaxException exception = null;
@@ -86,37 +107,34 @@ public class NekoCommand {
                 exception = CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand().create();
             }
             if (exception != null) {
-                source.sendFailure(Component.literal(exception.getMessage()));
+                errorMessage = exception.getMessage();
+                source.sendFailure(Component.literal(errorMessage));
             }
         } else {
             try {
                 result = commands.getDispatcher().execute(parse);
+                success = result > 0;
+                if (!success) {
+                    errorMessage = "命令未执行（返回值为 0）";
+                    source.sendFailure(Component.literal(errorMessage));
+                }
             } catch (CommandSyntaxException e) {
-                source.sendFailure(Component.literal(e.getMessage()));
+                errorMessage = e.getMessage();
+                source.sendFailure(Component.literal(errorMessage));
             } catch (Exception e) {
-                source.sendFailure(Component.literal("命令执行出错: " + e.getMessage()));
+                errorMessage = "命令执行出错: " + e.getMessage();
+                source.sendFailure(Component.literal(errorMessage));
             }
         }
 
-        source.sendSuccess(() -> Component.translatable("neko_tlm_bridge.command.executed", command), true);
-
-        if (pending.conn != null && pending.conn.isOpen()) {
-            JsonObject response = new JsonObject();
-            response.addProperty("type", Protocol.TYPE_COMMAND_EXECUTION_RESULT);
-            if (pending.originalRequestId != null) {
-                response.addProperty("request_id", pending.originalRequestId);
-            }
-            JsonObject data = new JsonObject();
-            data.addProperty("approved", true);
-            data.addProperty("success", result > 0);
-            data.addProperty("command", command);
-            data.addProperty("approved_by", source.getTextName());
-            response.add("data", data);
-            pending.conn.send(GSON.toJson(response));
+        if (success) {
+            source.sendSuccess(() -> Component.translatable("neko_tlm_bridge.command.executed", command), false);
         }
+        sendCommandResult(pending, true, success, source.getTextName(), errorMessage);
 
-        LOGGER.info("Player {} accepted command: {} (pending_id={})", source.getTextName(), command, pendingId);
-        return 1;
+        LOGGER.info("Player {} accepted command: {} (pending_id={}, success={})",
+                source.getTextName(), command, pendingId, success);
+        return success ? 1 : 0;
     }
 
     private static int rejectCommand(CommandSourceStack source, String pendingId) {
@@ -127,28 +145,29 @@ public class NekoCommand {
         }
 
         PendingCommandManager manager = wsServer.getPendingCommandManager();
-        PendingCommandManager.PendingCommand pending = manager.getAndRemove(pendingId);
+        PendingCommandManager.PendingCommand pending = manager.get(pendingId);
 
         if (pending == null) {
             source.sendFailure(Component.translatable("neko_tlm_bridge.command.not_found", pendingId));
             return 0;
         }
 
-        source.sendSuccess(() -> Component.translatable("neko_tlm_bridge.command.rejected", pending.command), true);
-
-        if (pending.conn != null && pending.conn.isOpen()) {
-            JsonObject response = new JsonObject();
-            response.addProperty("type", Protocol.TYPE_COMMAND_EXECUTION_RESULT);
-            if (pending.originalRequestId != null) {
-                response.addProperty("request_id", pending.originalRequestId);
-            }
-            JsonObject data = new JsonObject();
-            data.addProperty("approved", false);
-            data.addProperty("command", pending.command);
-            data.addProperty("rejected_by", source.getTextName());
-            response.add("data", data);
-            pending.conn.send(GSON.toJson(response));
+        if (!(source.getEntity() instanceof ServerPlayer player)
+                || pending.targetPlayerUuid == null
+                || !pending.targetPlayerUuid.equals(player.getUUID())) {
+            source.sendFailure(Component.literal("此指令确认仅限发起请求的客户端玩家"));
+            return 0;
         }
+
+        pending = manager.getAndRemove(pendingId);
+        if (pending == null) {
+            source.sendFailure(Component.translatable("neko_tlm_bridge.command.not_found", pendingId));
+            return 0;
+        }
+
+        String rejectedCommand = pending.command;
+        source.sendSuccess(() -> Component.translatable("neko_tlm_bridge.command.rejected", rejectedCommand), false);
+        sendCommandResult(pending, false, false, source.getTextName(), null);
 
         LOGGER.info("Player {} rejected command: {} (pending_id={})", source.getTextName(), pending.command, pendingId);
         return 0;
@@ -176,7 +195,7 @@ public class NekoCommand {
         return 1;
     }
 
-    public static void broadcastCommandRequest(MinecraftServer server, String pendingId, String command) {
+    public static void sendCommandRequest(ServerPlayer player, String pendingId, String command) {
         Component header = Component.translatable("neko_tlm_bridge.command.request_header")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
 
@@ -206,6 +225,37 @@ public class NekoCommand {
                 .append(separator)
                 .append(rejectBtn);
 
-        server.getPlayerList().broadcastSystemMessage(message, false);
+        player.sendSystemMessage(message);
+    }
+
+    private static void sendCommandResult(PendingCommandManager.PendingCommand pending,
+                                           boolean approved, boolean success,
+                                           String actor, String errorMessage) {
+        if (pending.conn == null || !pending.conn.isOpen()) {
+            return;
+        }
+        JsonObject response = new JsonObject();
+        response.addProperty("type", Protocol.TYPE_COMMAND_EXECUTION_RESULT);
+        if (pending.originalRequestId != null) {
+            response.addProperty("request_id", pending.originalRequestId);
+        }
+        JsonObject data = new JsonObject();
+        data.addProperty("approved", approved);
+        data.addProperty("success", success);
+        data.addProperty("command", pending.command);
+        if (approved) {
+            data.addProperty("approved_by", actor);
+        } else if (actor != null && !actor.isBlank()) {
+            data.addProperty("rejected_by", actor);
+        }
+        if (errorMessage != null && !errorMessage.isBlank()) {
+            data.addProperty("error", errorMessage);
+        }
+        response.add("data", data);
+        try {
+            pending.conn.send(GSON.toJson(response));
+        } catch (Exception e) {
+            LOGGER.debug("Failed to send command execution result: {}", e.getMessage());
+        }
     }
 }

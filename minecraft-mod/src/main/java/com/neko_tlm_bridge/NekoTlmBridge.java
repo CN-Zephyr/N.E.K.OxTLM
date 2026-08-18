@@ -145,6 +145,7 @@ public class NekoTlmBridge {
         if (webSocketServer != null) {
             try {
                 GameEventHandler.flushPendingBehaviorEvents();
+                webSocketServer.getPendingCommandManager().cancelAll("Minecraft server is stopping");
                 webSocketServer.stop();
                 LOGGER.info("N.E.K.O Bridge WebSocket server stopped");
             } catch (Exception e) {
@@ -179,6 +180,9 @@ public class NekoTlmBridge {
 
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         MaidPathDebugService.removeSubscriber(event.getEntity().getUUID());
+        if (webSocketServer != null) {
+            webSocketServer.getPendingCommandManager().cancelForPlayer(event.getEntity().getUUID());
+        }
     }
 
     private static void registerMaidActionFactories() {

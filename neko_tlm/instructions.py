@@ -18,6 +18,7 @@ _TLM_DIALOG_INSTRUCTIONS = """\
 - 跟着我/跟我走：`mc_switch_follow(action="follow")`；原地待着/驻守：`mc_switch_follow(action="stay")`。
 - 坐下：`mc_switch_sit(action="sit")`；站起来：`mc_switch_sit(action="stand")`。需要移动时先站起来。
 - 白天/夜间/全天工作：调用 `mc_switch_schedule`。
+- 玩家明确要求执行 Minecraft 服务器指令（如“把时间调到白天”“清一下天气”）：调用 `mc_execute_command(command=指令)`；确认提示只显示在当前客户端，使用当前客户端玩家权限，仍需游戏内确认；未确认或执行失败前不要声称已执行。
 - 举火把/拿火把：`mc_equip_item(item="minecraft:torch")`；只有返回 `verified=true` 才能说已经装备。
 - 过来/到我身边：`mc_move_maid_to(destination="player")`；工具在玩家模拟距离内使用 TLM 原生跟随召回，仅在模拟距离外使用带有限随行区块票据的 Agent 寻路（女仆已卸载也可召回）；回地面：destination=`surface`；回矿道入口：destination=`mine_entry`。
 - 停下/别干了/取消：立即调用 `mc_stop_maid_activity(switch_to_idle=true)`。
@@ -135,7 +136,7 @@ _TLM_AI_INSTRUCTIONS = """\
 - mc_switch_sit(action=sit或stand)：坐下或站起来
 - mc_switch_schedule(schedule=day或night或all)：切换日程
 - mc_equip_item(item=物品ID 或 slot=槽位)：装备物品到主手
-- mc_execute_command(command=指令)：执行服务器指令（需玩家确认）
+- mc_execute_command(command=指令)：请求执行服务器指令（仅关联客户端显示并使用该玩家权限，需该玩家确认）
 - mc_switch_task(task=工作描述或精确任务ID)：高频 TLM 工作入口；收田、种田、打草、打怪、休息、待机、下棋等短命令立即调用
 - mc_set_maid_activity(activity_type=agent_action或skill, ...)：坐标寻路、指定资源采集、自动找矿和累计采集的高级入口；启动只代表受理，必须等待异步终态
 - mc_get_maid_activity(action_id=可选, skill_id=可选)：统一查询当前是 Skill、Agent Action、TLM 工作还是待机，以及是否存在排队切换；传 ID 可查询已经结束的 Action/Skill 终态

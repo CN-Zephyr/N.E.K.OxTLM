@@ -35,6 +35,7 @@ from .playmate import MinecraftPushRouter, PlaymateContextManager
 from .playmate.debug_log import PlaymateDebugLogger
 from .tool_defs import (
     AGENT_NAVIGATE_MAID_TO_COORDINATES,
+    MC_EXECUTE_COMMAND,
     MC_EQUIP_ITEM,
     MC_GAME_CONTEXT,
     MC_GATHER_BLOCKS,
@@ -1204,8 +1205,9 @@ class NekoMinecraftPlugin(NekoPluginBase):
         """内部兼容入口，供提示词或 RAG Skill 使用。"""
         return await _tools.do_use_skill(self, skill_name=skill_name)
 
+    @llm_tool(**MC_EXECUTE_COMMAND)
     async def execute_command(self, *, command="", **_):
-        """内部入口；普通对话轮次不会暴露命令执行能力。"""
+        """请求执行 Minecraft 指令；实际执行仍需游戏内玩家确认。"""
         return await _tools.do_execute_command(self, command=command)
 
     async def set_plan(self, *, plan=None, title=None, steps=None, completed_steps=None,

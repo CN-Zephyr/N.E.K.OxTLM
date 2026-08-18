@@ -51,10 +51,11 @@ class LlmToolSurfaceTests(unittest.TestCase):
                 "MC_GAME_CONTEXT",
                 "MC_MOVE_MAID_TO",
                 "MC_STOP_MAID_ACTIVITY",
+                "MC_EXECUTE_COMMAND",
             },
             exposed,
         )
-        self.assertEqual(11, len(exposed))
+        self.assertEqual(12, len(exposed))
 
     def test_compatibility_tools_are_not_advertised_to_the_llm(self):
         exposed = self._decorated_definition_names()
@@ -162,7 +163,6 @@ class LlmToolSurfaceTests(unittest.TestCase):
             "mc_use_skill",
             "mc_set_plan",
             "mc_send_chat",
-            "mc_execute_command",
             "mc_get_maid_activity",
             "mc_get_maid_capabilities",
             "mc_set_maid_activity",
@@ -172,6 +172,19 @@ class LlmToolSurfaceTests(unittest.TestCase):
         self.assertIn("mc_mine_ore", text)
         self.assertIn("mc_gather_blocks", text)
         self.assertIn("mc_stop_maid_activity", text)
+        self.assertIn("mc_execute_command", text)
+
+    def test_command_execution_tool_is_advertised_with_confirmation_guard(self):
+        exposed = self._decorated_definition_names()
+        self.assertIn("MC_EXECUTE_COMMAND", exposed)
+        definition = _tool_defs.MC_EXECUTE_COMMAND
+        self.assertEqual("mc_execute_command", definition["name"])
+        self.assertEqual(["command"], definition["parameters"]["required"])
+        self.assertIn("确认", definition["description"])
+        self.assertIn("客户端", definition["description"])
+        self.assertIn("权限", definition["description"])
+        self.assertFalse(definition["parameters"]["additionalProperties"])
+        self.assertEqual(120, definition["timeout"])
 
     def test_default_dialog_prompt_is_small(self):
         self.assertLess(len(_instructions._TLM_DIALOG_INSTRUCTIONS), 3000)

@@ -45,6 +45,7 @@ public class NekoWebSocketServer extends WebSocketServer {
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
         clients.remove(conn);
+        pendingCommandManager.cancelForConnection(conn);
         LOGGER.info("N.E.K.O client disconnected: code={}, reason={}", code, reason);
     }
 
@@ -99,6 +100,9 @@ public class NekoWebSocketServer extends WebSocketServer {
     }
 
     public void broadcastConfigUpdate() {
+        if (!ModConfig.COMMAND_EXECUTION_ENABLED.get()) {
+            pendingCommandManager.cancelAll("Command execution was disabled in Minecraft mod config");
+        }
         if (clients.isEmpty()) return;
         JsonObject msg = new JsonObject();
         msg.addProperty("type", Protocol.TYPE_CONFIG_UPDATE);

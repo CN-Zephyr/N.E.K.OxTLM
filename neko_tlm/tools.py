@@ -1593,13 +1593,20 @@ async def do_use_skill(plugin, *, skill_name=""):
 
 
 async def do_execute_command(plugin, *, command=""):
+    command = str(command or "").strip()
     plugin.logger.info(f"[Entry] execute_command called with command='{command}'")
     if not plugin.connected:
         return Err("Not connected to Minecraft")
     if not command:
         return Err("请提供command参数")
+    maid_id = plugin._resolve_maid_id()
+    if not maid_id:
+        return Err("No maid assigned; cannot resolve the client player")
     result = await plugin._send_request(
-        {"type": "execute_command", "data": {"command": command}},
+        {
+            "type": "execute_command",
+            "data": {"command": command, "maid_id": maid_id},
+        },
         timeout=120,
     )
     if result.get("type") == "error":
@@ -1607,15 +1614,34 @@ async def do_execute_command(plugin, *, command=""):
         if "disabled" in error_msg.lower():
             return Err("Command execution is disabled in Minecraft mod config")
         return Err(str(result.get("data", {})))
+    if result.get("type") != "command_execution_result":
+        return Err(
+            f"Unexpected command execution response: {result.get('type', 'unknown')}"
+        )
     result_data = result.get("data", {})
     if result_data.get("approved") is False:
         if result_data.get("expired"):
             return Err("Command request expired (no player confirmation within 120s)")
+        if result_data.get("cancelled"):
+            return Err(
+                result_data.get(
+                    "message", "Command request was cancelled before confirmation"
+                )
+            )
         rejected_by = result_data.get("rejected_by", "unknown")
         return Err(f"Command rejected by player {rejected_by}")
+    if result_data.get("success") is False:
+        error_message = (
+            result_data.get("error")
+            or result_data.get("message")
+            or "Minecraft command failed"
+        )
+        return Err(f"Command execution failed: {error_message}")
+    if result_data.get("approved") is not True:
+        return Err("Command request did not receive player confirmation")
     return Ok({
         "approved": True,
-        "success": result_data.get("success", True),
+        "success": True,
         "command": result_data.get("command", command),
         "result": result_data.get("result"),
         "approved_by": result_data.get("approved_by", ""),

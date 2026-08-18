@@ -81,7 +81,7 @@ graph LR
 | `websocket.port`          | `48920` | WebSocket 服务器监听端口                          |
 | `ignoreTlmBuiltinContext` | `true`  | 忽略车万女仆内置 AI 上下文，防止与 N.E.K.O 冲突             |
 | `eventPushEnabled`        | `true`  | 启用游戏事件推送，将游戏事件通过 WebSocket 推送给 N.E.K.O     |
-| `commandExecutionEnabled` | `false` | 启用指令执行，允许 N.E.K.O 请求执行 Minecraft 指令（需玩家确认） |
+| `commandExecutionEnabled` | `false` | 启用指令执行，允许 N.E.K.O 请求执行 Minecraft 指令（仅关联客户端显示、仅该客户端玩家可确认，并使用该玩家权限） |
 | `chatBubbleEnabled`       | `true`  | 启用聊天气泡显示                                   |
 | `chatBoxEnabled`          | `true`  | 启用聊天框消息显示                                  |
 | `weatherEventEnabled`     | `true`  | 启用天气变化事件推送                                 |
@@ -124,7 +124,7 @@ graph LR
 | `get_game_context` | 获取游戏上下文           | `category`, `maid_id`(可选)                           |
 | `use_skill`        | 使用/查询技能           | `skill_name`, `maid_id`(可选)                         |
 | `attack_target`    | 指定女仆攻击目标（实验性，未暴露给LLM） | `maid_id`, `target_entity_id` 或 `target_entity_ids` |
-| `execute_command`  | 请求执行 Minecraft 指令 | `command`                                           |
+| `execute_command`  | 请求执行 Minecraft 指令（仅关联客户端显示并使用该玩家权限） | `command`, `maid_id` |
 | `get_config`       | 获取当前配置            | 无                                                   |
 | `set_monitored_maid` | 设置监控的女仆ID（用于背包物品变化检测） | `maid_id`                           |
 | `set_plan`         | 设置游戏内 HUD 计划文本  | `plan`（空字符串清除；插件侧可由结构化目标板生成）          |

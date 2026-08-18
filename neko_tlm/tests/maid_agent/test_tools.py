@@ -675,6 +675,66 @@ class MaidActionToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["is_error"])
         self.assertEqual("SERVER_NOT_READY", result["error"])
 
+    async def test_execute_command_scopes_request_to_assigned_maid_owner(self):
+        plugin = FakePlugin({
+            "type": "command_execution_result",
+            "data": {
+                "approved": True,
+                "success": True,
+                "command": "/time set day",
+                "approved_by": "owner",
+            },
+        })
+
+        result = await tools.do_execute_command(
+            plugin, command="  /time set day  "
+        )
+
+        self.assertFalse(result["is_error"])
+        self.assertEqual("/time set day", plugin.requests[0]["data"]["command"])
+        self.assertEqual("maid-1", plugin.requests[0]["data"]["maid_id"])
+        self.assertTrue(result["output"]["success"])
+
+    async def test_execute_command_failure_is_a_tool_error(self):
+        plugin = FakePlugin({
+            "type": "command_execution_result",
+            "data": {
+                "approved": True,
+                "success": False,
+                "command": "/unknown",
+                "error": "Unknown command",
+            },
+        })
+
+        result = await tools.do_execute_command(plugin, command="/unknown")
+
+        self.assertTrue(result["is_error"])
+        self.assertIn("Unknown command", result["output"]["error"])
+
+    async def test_execute_command_cancellation_is_not_reported_as_rejection(self):
+        plugin = FakePlugin({
+            "type": "command_execution_result",
+            "data": {
+                "approved": False,
+                "cancelled": True,
+                "message": "Command execution was disabled",
+            },
+        })
+
+        result = await tools.do_execute_command(plugin, command="/time set day")
+
+        self.assertTrue(result["is_error"])
+        self.assertEqual("Command execution was disabled", result["output"]["error"])
+
+    async def test_execute_command_requires_an_assigned_maid(self):
+        plugin = FakePlugin({})
+        plugin._resolve_maid_id = lambda maid_id=None: ""
+
+        result = await tools.do_execute_command(plugin, command="/time set day")
+
+        self.assertTrue(result["is_error"])
+        self.assertEqual([], plugin.requests)
+
 
 if __name__ == "__main__":
     unittest.main()
