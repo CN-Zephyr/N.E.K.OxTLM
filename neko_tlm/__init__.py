@@ -35,8 +35,8 @@ from .playmate import MinecraftPushRouter, PlaymateContextManager
 from .playmate.debug_log import PlaymateDebugLogger
 from .tool_defs import (
     AGENT_NAVIGATE_MAID_TO_COORDINATES,
-    MC_EXECUTE_COMMAND,
     MC_EQUIP_ITEM,
+    MC_EXECUTE_COMMAND,
     MC_GAME_CONTEXT,
     MC_GATHER_BLOCKS,
     MC_MAID_STATUS,
